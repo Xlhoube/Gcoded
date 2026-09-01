@@ -57,6 +57,7 @@ let btnImport3D, fileImport3D, reliefModal, btnCloseRelief, btnCloseReliefFooter
 let previewOriginal, previewDepthmap;
 let sliderReliefDepth, sliderReliefBlur, sliderReliefContrast, sliderReliefResolution, sliderReliefDetail;
 let lblReliefDepth, lblReliefBlur, lblReliefContrast, lblReliefResolution, lblReliefDetail;
+let sliderReliefLightBalance, lblReliefLightBalance;
 let sliderReliefBgCut, lblReliefBgCut, sliderReliefLightAngle, lblReliefLightAngle, selectReliefMaterialTheme;
 let btnViewArtcam, btnViewGrayscale;
 let chkReliefInvert, chkReliefDoublePass;
@@ -184,6 +185,8 @@ function cacheUIElements() {
   lblReliefContrast = document.getElementById('lbl-relief-contrast');
   lblReliefResolution = document.getElementById('lbl-relief-resolution');
   
+  sliderReliefLightBalance = document.getElementById('relief-light-balance');
+  lblReliefLightBalance = document.getElementById('lbl-relief-light-balance');
   sliderReliefBgCut = document.getElementById('relief-bg-cut');
   lblReliefBgCut = document.getElementById('lbl-relief-bg-cut');
   sliderReliefLightAngle = document.getElementById('relief-light-angle');
@@ -772,8 +775,9 @@ function applyBoxBlur(pixels, width, height, radius) {
 
 /**
  * Extrai mapa multi-banda de traços e feições faciais reconhecíveis (olhos, pálpebras, nariz, lábios, expressão)
+ * com normalização adaptativa de iluminação e relevo direcional Sobel
  */
-function extractFacialFeatureMap(img, targetW, targetH) {
+function extractFacialFeatureMap(img, targetW, targetH, lightBalancePct) {
   const tmpCanvas = document.createElement('canvas');
   tmpCanvas.width = targetW;
   tmpCanvas.height = targetH;
@@ -794,20 +798,52 @@ function extractFacialFeatureMap(img, targetW, targetH) {
     greyArr[i * 4 + 3] = 255;
   }
 
-  // 2. Multi-Scale Laplacian Filtering (Escalas de 2px e 7px)
-  const blurFine = applyBoxBlur(greyArr, targetW, targetH, 2);
-  const blurMedium = applyBoxBlur(greyArr, targetW, targetH, 7);
+  // 2. Normalização de Iluminação Ambiente (Remove sombras duras de um lado do rosto)
+  const balance = (lightBalancePct !== undefined ? lightBalancePct : 50) / 100;
+  const normLuma = new Float32Array(targetW * targetH);
+  if (balance > 0) {
+    const blurAmbient = applyBoxBlur(greyArr, targetW, targetH, 16);
+    for (let i = 0; i < targetW * targetH; i++) {
+      const amb = blurAmbient[i * 4] / 255;
+      const ratio = (luma[i] + 0.05) / (amb + 0.15);
+      const balanced = luma[i] * (1 - balance) + ratio * balance * 0.6;
+      normLuma[i] = Math.min(1, Math.max(0, balanced));
+    }
+  } else {
+    for (let i = 0; i < targetW * targetH; i++) normLuma[i] = luma[i];
+  }
 
-  // 3. Síntese Anatómica Reconhecível
-  const featureMap = new Float32Array(targetW * targetH);
   for (let i = 0; i < targetW * targetH; i++) {
-    const fine = luma[i] - (blurFine[i * 4] / 255);
-    const medium = luma[i] - (blurMedium[i * 4] / 255);
+    const g = Math.round(normLuma[i] * 255);
+    greyArr[i * 4] = greyArr[i * 4 + 1] = greyArr[i * 4 + 2] = g;
+  }
 
-    // No relevo escultural: zonas claras sobressaem e escuras (pupilas/sombras) afundam
-    let feat = luma[i] + (fine * 1.3) + (medium * 0.85);
-    feat = Math.min(1, Math.max(0, feat));
-    featureMap[i] = feat;
+  // 3. Multi-Scale Laplacian Filtering (Escalas de 2px e 6px)
+  const blurFine = applyBoxBlur(greyArr, targetW, targetH, 2);
+  const blurMedium = applyBoxBlur(greyArr, targetW, targetH, 6);
+
+  // 4. Gravação de Relevo Anatómico com Sobel
+  const featureMap = new Float32Array(targetW * targetH);
+  for (let y = 0; y < targetH; y++) {
+    const ym = Math.max(0, y - 1);
+    const yp = Math.min(targetH - 1, y + 1);
+    for (let x = 0; x < targetW; x++) {
+      const xm = Math.max(0, x - 1);
+      const xp = Math.min(targetW - 1, x + 1);
+      const idx = y * targetW + x;
+
+      const fine = normLuma[idx] - (blurFine[idx * 4] / 255);
+      const medium = normLuma[idx] - (blurMedium[idx * 4] / 255);
+
+      const gx = normLuma[y * targetW + xp] - normLuma[y * targetW + xm];
+      const gy = normLuma[yp * targetW + x] - normLuma[ym * targetW + x];
+      const edge = Math.hypot(gx, gy);
+
+      // Síntese expressiva: traços nítidos + relevo de bordas + anatomia facial
+      let feat = normLuma[idx] + (fine * 1.8) + (medium * 1.2) - (edge * 0.35);
+      feat = Math.min(1, Math.max(0, feat));
+      featureMap[idx] = feat;
+    }
   }
   return featureMap;
 }
@@ -919,14 +955,14 @@ function renderArtCAMShading(depthMap, width, height, lightAngleDeg, materialThe
  * 0 = superfície (Z=0), 1 = corte mais fundo (Z=-maxDepth)
  */
 function processImageToDepthMap(img, options) {
-  const { blur, gamma, invert, scaleFactor, mode, detail, bgCut } = options;
+  const { blur, gamma, invert, scaleFactor, mode, detail, bgCut, lightBalance } = options;
 
   let depthMap = null;
   let finalW = 0, finalH = 0;
 
   // CASO 1: MODO IA DEEP MAP COM FUSÃO ANATÓMICA MULTI-ESCALA
   if (mode === 'ai-depth' && cachedAIDepthResult) {
-    const { rawDepthMap, width, height, pLow, pHigh, range, facialFeatureMap } = cachedAIDepthResult;
+    const { rawDepthMap, width, height, pLow, pHigh, range } = cachedAIDepthResult;
     finalW = width;
     finalH = height;
 
@@ -945,9 +981,14 @@ function processImageToDepthMap(img, options) {
     }
     const smoothedBase = blur > 0 ? applyBoxBlur(baseArr, width, height, blur) : baseArr;
 
-    // 2. Usar mapa de traços e feições anatómicas
-    const fMap = facialFeatureMap || extractFacialFeatureMap(img, width, height);
-    const detailWeight = ((detail !== undefined ? detail : 65) / 100);
+    // 2. Extrair mapa de traços faciais (com balanceamento de iluminação)
+    const curLB = lightBalance !== undefined ? lightBalance : 50;
+    if (!cachedAIDepthResult.facialFeatureMap || cachedAIDepthResult.lastLightBalance !== curLB) {
+      cachedAIDepthResult.facialFeatureMap = extractFacialFeatureMap(img, width, height, curLB);
+      cachedAIDepthResult.lastLightBalance = curLB;
+    }
+    const fMap = cachedAIDepthResult.facialFeatureMap;
+    const detailWeight = ((detail !== undefined ? detail : 75) / 100);
 
     // 3. Fusão Proporcional ArtCAM: Curvatura 3D + Escultura dos Traços
     depthMap = new Float32Array(width * height);
@@ -1026,13 +1067,14 @@ function updateReliefPreviewAndStats() {
   const resolutionPct = parseInt(sliderReliefResolution.value);
   const scaleFactor = resolutionPct / 100;
   const toolDia = parseFloat(inputToolDia?.value) || 3.175;
-  const detail = sliderReliefDetail ? parseFloat(sliderReliefDetail.value) : 65;
+  const detail = sliderReliefDetail ? parseFloat(sliderReliefDetail.value) : 75;
+  const lightBalance = sliderReliefLightBalance ? parseFloat(sliderReliefLightBalance.value) : 50;
   const bgCut = sliderReliefBgCut ? parseFloat(sliderReliefBgCut.value) : 15;
   const lightAngle = sliderReliefLightAngle ? parseFloat(sliderReliefLightAngle.value) : 315;
   const materialTheme = selectReliefMaterialTheme ? selectReliefMaterialTheme.value : 'artcam-gold';
 
   const { depthMap, width, height } = processImageToDepthMap(reliefImageEl, {
-    blur, gamma, invert, scaleFactor, mode: currentReliefMode, detail, bgCut
+    blur, gamma, invert, scaleFactor, mode: currentReliefMode, detail, bgCut, lightBalance
   });
 
   // Renderizar preview no canvas
@@ -1107,12 +1149,13 @@ function placeReliefImageOnCanvas() {
   const scaleFactor = resolutionPct / 100;
   const maxDepth = parseFloat(sliderReliefDepth.value);
   const doublePass = chkReliefDoublePass.checked;
-  const detail = sliderReliefDetail ? parseFloat(sliderReliefDetail.value) : 65;
+  const detail = sliderReliefDetail ? parseFloat(sliderReliefDetail.value) : 75;
+  const lightBalance = sliderReliefLightBalance ? parseFloat(sliderReliefLightBalance.value) : 50;
   const bgCut = sliderReliefBgCut ? parseFloat(sliderReliefBgCut.value) : 15;
 
   // Extrair o Float32Array final do mapa de profundidade
   const { depthMap, width: dmW, height: dmH } = processImageToDepthMap(reliefImageEl, {
-    blur, gamma, invert, scaleFactor, mode: currentReliefMode, detail, bgCut
+    blur, gamma, invert, scaleFactor, mode: currentReliefMode, detail, bgCut, lightBalance
   });
 
   const reliefSettings = {
@@ -1123,6 +1166,7 @@ function placeReliefImageOnCanvas() {
     maxDepth,
     doublePass,
     detail,
+    lightBalance,
     bgCut,
     mode: currentReliefMode,
     srcWidth: reliefImageEl.width,
@@ -1275,6 +1319,7 @@ function setupEventListeners() {
   const reliefSliders = [
     { el: sliderReliefDepth, lbl: lblReliefDepth },
     { el: sliderReliefDetail, lbl: lblReliefDetail },
+    { el: sliderReliefLightBalance, lbl: lblReliefLightBalance },
     { el: sliderReliefContrast, lbl: lblReliefContrast },
     { el: sliderReliefBgCut, lbl: lblReliefBgCut },
     { el: sliderReliefLightAngle, lbl: lblReliefLightAngle },
