@@ -613,8 +613,8 @@ async function generateAIDepthMap(img) {
     const pHigh = sample[Math.floor(sampleSize * 0.95)] || 1;
     const range = Math.max(0.05, pHigh - pLow);
 
-    // Pré-calcular mapa de detalhes de alta frequência uma única vez
-    const facialDetails = extractHighFrequencyDetails(img, width, height);
+    // Pré-calcular mapa de detalhes anatómicos e traços faciais uma única vez
+    const facialFeatureMap = extractFacialFeatureMap(img, width, height);
 
     cachedAIDepthResult = {
       rawDepthMap: depthMap,
@@ -623,7 +623,7 @@ async function generateAIDepthMap(img) {
       pLow,
       pHigh,
       range,
-      facialDetails
+      facialFeatureMap
     };
 
     updateAIProgress(100, '✨ Deep Map 3D por IA gerado com sucesso!');
@@ -771,9 +771,9 @@ function applyBoxBlur(pixels, width, height, radius) {
 }
 
 /**
- * Extrai detalhes de alta frequência (olhos, boca, traços faciais, cabelo) da imagem original
+ * Extrai mapa multi-banda de traços e feições faciais reconhecíveis (olhos, pálpebras, nariz, lábios, expressão)
  */
-function extractHighFrequencyDetails(img, targetW, targetH) {
+function extractFacialFeatureMap(img, targetW, targetH) {
   const tmpCanvas = document.createElement('canvas');
   tmpCanvas.width = targetW;
   tmpCanvas.height = targetH;
@@ -794,16 +794,22 @@ function extractHighFrequencyDetails(img, targetW, targetH) {
     greyArr[i * 4 + 3] = 255;
   }
 
-  // 2. Criar versão suavizada (Low-Pass) usando box blur com raio médio
-  const blurred = applyBoxBlur(greyArr, targetW, targetH, 3);
+  // 2. Multi-Scale Laplacian Filtering (Escalas de 2px e 7px)
+  const blurFine = applyBoxBlur(greyArr, targetW, targetH, 2);
+  const blurMedium = applyBoxBlur(greyArr, targetW, targetH, 7);
 
-  // 3. Detalhes de alta frequência = Original - Suavizada (centrado em 0)
-  const details = new Float32Array(targetW * targetH);
+  // 3. Síntese Anatómica Reconhecível
+  const featureMap = new Float32Array(targetW * targetH);
   for (let i = 0; i < targetW * targetH; i++) {
-    const blurVal = blurred[i * 4] / 255;
-    details[i] = luma[i] - blurVal;
+    const fine = luma[i] - (blurFine[i * 4] / 255);
+    const medium = luma[i] - (blurMedium[i * 4] / 255);
+
+    // No relevo escultural: zonas claras sobressaem e escuras (pupilas/sombras) afundam
+    let feat = luma[i] + (fine * 1.3) + (medium * 0.85);
+    feat = Math.min(1, Math.max(0, feat));
+    featureMap[i] = feat;
   }
-  return details;
+  return featureMap;
 }
 
 let reliefRafTimer = null;
@@ -918,13 +924,13 @@ function processImageToDepthMap(img, options) {
   let depthMap = null;
   let finalW = 0, finalH = 0;
 
-  // CASO 1: MODO IA DEEP MAP COM DADOS EM CACHE (Zero lag em tempo real)
+  // CASO 1: MODO IA DEEP MAP COM FUSÃO ANATÓMICA MULTI-ESCALA
   if (mode === 'ai-depth' && cachedAIDepthResult) {
-    const { rawDepthMap, width, height, pLow, pHigh, range, facialDetails } = cachedAIDepthResult;
+    const { rawDepthMap, width, height, pLow, pHigh, range, facialFeatureMap } = cachedAIDepthResult;
     finalW = width;
     finalH = height;
 
-    // 1. Criar base volumétrica suavizada (o blur só afeta a base 3D, nunca os olhos/boca)
+    // 1. Criar base volumétrica 3D (o blur só afeta a base, nunca os olhos/boca)
     const baseArr = new Uint8ClampedArray(width * height * 4);
     const usePLow = pLow !== undefined ? pLow : 0;
     const useRange = range !== undefined ? range : 1;
@@ -939,15 +945,18 @@ function processImageToDepthMap(img, options) {
     }
     const smoothedBase = blur > 0 ? applyBoxBlur(baseArr, width, height, blur) : baseArr;
 
-    // 2. Usar mapa de detalhes faciais em cache
-    const fDetails = facialDetails || extractHighFrequencyDetails(img, width, height);
-    const detailWeight = ((detail !== undefined ? detail : 65) / 100) * 0.75;
+    // 2. Usar mapa de traços e feições anatómicas
+    const fMap = facialFeatureMap || extractFacialFeatureMap(img, width, height);
+    const detailWeight = ((detail !== undefined ? detail : 65) / 100);
 
-    // 3. Combinar envelope volumétrico com detalhes nítidos preservados
+    // 3. Fusão Proporcional ArtCAM: Curvatura 3D + Escultura dos Traços
     depthMap = new Float32Array(width * height);
     for (let i = 0; i < width * height; i++) {
-      const baseNorm = smoothedBase[i * 4] / 255;
-      let finalVal = baseNorm + (fDetails[i] * detailWeight);
+      const base3D = smoothedBase[i * 4] / 255;
+      const feat = fMap[i];
+
+      // Fusão expressiva: preserva a forma 3D convexa e grava os traços nítidos
+      let finalVal = base3D * (1.0 - detailWeight * 0.70) + feat * (detailWeight * 0.70);
       finalVal = Math.min(1, Math.max(0, finalVal));
 
       // Para o CNC: 0 = superfície (Z=0), 1 = profundidade máxima (-maxDepth)
