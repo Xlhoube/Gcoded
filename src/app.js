@@ -794,37 +794,31 @@ function processImageToDepthMap(img, options) {
     const pHigh = sample[Math.floor(sampleSize * 0.95)] || 1;
     const range = Math.max(0.05, pHigh - pLow);
 
-    // 2. Extrair detalhes de alta frequência (olhos, lábios, sobrancelhas, nariz)
-    const facialDetails = extractHighFrequencyDetails(img, width, height);
-    const detailWeight = ((detail !== undefined ? detail : 45) / 100) * 0.55;
-
-    // 3. Combinar envelope volumétrico 3D com detalhes nítidos
-    const combinedArr = new Uint8ClampedArray(width * height * 4);
+    // 2. Criar base volumétrica suavizada (o blur só afeta a base 3D, nunca os olhos/boca)
+    const baseArr = new Uint8ClampedArray(width * height * 4);
     for (let i = 0; i < width * height; i++) {
-      // Normalização esticada
       let norm = (rawDepthMap[i] - pLow) / range;
       norm = Math.min(1, Math.max(0, norm));
-
-      // Curva de contraste gama
       norm = Math.pow(norm, gamma);
-
-      // Injeção de traços
-      let finalVal = norm + (facialDetails[i] * detailWeight);
-      finalVal = Math.min(1, Math.max(0, finalVal));
-
-      const v = Math.round(finalVal * 255);
-      combinedArr[i * 4] = combinedArr[i * 4 + 1] = combinedArr[i * 4 + 2] = v;
-      combinedArr[i * 4 + 3] = 255;
+      const v = Math.round(norm * 255);
+      baseArr[i * 4] = baseArr[i * 4 + 1] = baseArr[i * 4 + 2] = v;
+      baseArr[i * 4 + 3] = 255;
     }
+    const smoothedBase = blur > 0 ? applyBoxBlur(baseArr, width, height, blur) : baseArr;
 
-    // 4. Suavização de ruído (se configurada)
-    const finalPixels = blur > 0 ? applyBoxBlur(combinedArr, width, height, blur) : combinedArr;
+    // 3. Extrair detalhes de alta frequência (olhos, lábios, sobrancelhas, contornos)
+    const facialDetails = extractHighFrequencyDetails(img, width, height);
+    const detailWeight = ((detail !== undefined ? detail : 45) / 100) * 0.75; // Ganho aumentado para relevo expressivo
 
+    // 4. Combinar envelope volumétrico com detalhes nítidos preservados
     const depthMap = new Float32Array(width * height);
     for (let i = 0; i < width * height; i++) {
-      const norm = finalPixels[i * 4] / 255;
+      const baseNorm = smoothedBase[i * 4] / 255;
+      let finalVal = baseNorm + (facialDetails[i] * detailWeight);
+      finalVal = Math.min(1, Math.max(0, finalVal));
+
       // Para o CNC: 0 = superfície (Z=0), 1 = profundidade máxima (-maxDepth)
-      const depth = invert ? norm : (1 - norm);
+      const depth = invert ? finalVal : (1 - finalVal);
       depthMap[i] = Math.min(1, Math.max(0, depth));
     }
     return { depthMap, width, height };
