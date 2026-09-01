@@ -589,7 +589,31 @@ async function generateAIDepthMap(img) {
       depthMap[i] = rawData[i] / 255;
     }
 
-    cachedAIDepthResult = { rawDepthMap: depthMap, width, height };
+    // Pré-calcular percentis uma única vez (elimina lag de ordenação em tempo real)
+    const sampleSize = Math.min(depthMap.length, 3000);
+    const sample = new Float32Array(sampleSize);
+    const step = Math.floor(depthMap.length / sampleSize);
+    for (let i = 0; i < sampleSize; i++) {
+      sample[i] = depthMap[i * step];
+    }
+    sample.sort();
+    const pLow = sample[Math.floor(sampleSize * 0.05)] || 0;
+    const pHigh = sample[Math.floor(sampleSize * 0.95)] || 1;
+    const range = Math.max(0.05, pHigh - pLow);
+
+    // Pré-calcular mapa de detalhes de alta frequência uma única vez
+    const facialDetails = extractHighFrequencyDetails(img, width, height);
+
+    cachedAIDepthResult = {
+      rawDepthMap: depthMap,
+      width,
+      height,
+      pLow,
+      pHigh,
+      range,
+      facialDetails
+    };
+
     updateAIProgress(100, '✨ Deep Map 3D por IA gerado com sucesso!');
 
     isProcessingAI = false;
@@ -770,6 +794,19 @@ function extractHighFrequencyDetails(img, targetW, targetH) {
   return details;
 }
 
+let reliefRafTimer = null;
+let offscreenPreviewCanvas = null;
+
+/**
+ * Agenda a actualização visual do preview de forma não bloqueante a 60 FPS
+ */
+function scheduleReliefPreviewUpdate() {
+  if (reliefRafTimer) cancelAnimationFrame(reliefRafTimer);
+  reliefRafTimer = requestAnimationFrame(() => {
+    updateReliefPreviewAndStats();
+  });
+}
+
 /**
  * Processa a imagem para gerar um mapa de profundidade Float32Array [0..1]
  * 0 = superfície (Z=0), 1 = corte mais fundo (Z=-maxDepth)
@@ -777,27 +814,17 @@ function extractHighFrequencyDetails(img, targetW, targetH) {
 function processImageToDepthMap(img, options) {
   const { blur, gamma, invert, scaleFactor, mode, detail } = options;
 
-  // CASO 1: MODO IA DEEP MAP COM INJEÇÃO DE TRAÇOS FACIAIS & AUTO-CONTRASTE
+  // CASO 1: MODO IA DEEP MAP COM DADOS EM CACHE (Zero lag em tempo real)
   if (mode === 'ai-depth' && cachedAIDepthResult) {
-    const { rawDepthMap, width, height } = cachedAIDepthResult;
+    const { rawDepthMap, width, height, pLow, pHigh, range, facialDetails } = cachedAIDepthResult;
 
-    // 1. Dynamic Range Expansion: Evita face lavada em branco puro
-    // Calcular percentis 5% e 95% do relevo para esticar a gama dinâmica
-    const sampleSize = Math.min(rawDepthMap.length, 5000);
-    const sample = new Float32Array(sampleSize);
-    const step = Math.floor(rawDepthMap.length / sampleSize);
-    for (let i = 0; i < sampleSize; i++) {
-      sample[i] = rawDepthMap[i * step];
-    }
-    sample.sort();
-    const pLow = sample[Math.floor(sampleSize * 0.05)] || 0;
-    const pHigh = sample[Math.floor(sampleSize * 0.95)] || 1;
-    const range = Math.max(0.05, pHigh - pLow);
-
-    // 2. Criar base volumétrica suavizada (o blur só afeta a base 3D, nunca os olhos/boca)
+    // 1. Criar base volumétrica suavizada (o blur só afeta a base 3D, nunca os olhos/boca)
     const baseArr = new Uint8ClampedArray(width * height * 4);
+    const usePLow = pLow !== undefined ? pLow : 0;
+    const useRange = range !== undefined ? range : 1;
+
     for (let i = 0; i < width * height; i++) {
-      let norm = (rawDepthMap[i] - pLow) / range;
+      let norm = (rawDepthMap[i] - usePLow) / useRange;
       norm = Math.min(1, Math.max(0, norm));
       norm = Math.pow(norm, gamma);
       const v = Math.round(norm * 255);
@@ -806,15 +833,15 @@ function processImageToDepthMap(img, options) {
     }
     const smoothedBase = blur > 0 ? applyBoxBlur(baseArr, width, height, blur) : baseArr;
 
-    // 3. Extrair detalhes de alta frequência (olhos, lábios, sobrancelhas, contornos)
-    const facialDetails = extractHighFrequencyDetails(img, width, height);
-    const detailWeight = ((detail !== undefined ? detail : 45) / 100) * 0.75; // Ganho aumentado para relevo expressivo
+    // 2. Usar mapa de detalhes faciais em cache
+    const fDetails = facialDetails || extractHighFrequencyDetails(img, width, height);
+    const detailWeight = ((detail !== undefined ? detail : 45) / 100) * 0.75;
 
-    // 4. Combinar envelope volumétrico com detalhes nítidos preservados
+    // 3. Combinar envelope volumétrico com detalhes nítidos preservados
     const depthMap = new Float32Array(width * height);
     for (let i = 0; i < width * height; i++) {
       const baseNorm = smoothedBase[i * 4] / 255;
-      let finalVal = baseNorm + (facialDetails[i] * detailWeight);
+      let finalVal = baseNorm + (fDetails[i] * detailWeight);
       finalVal = Math.min(1, Math.max(0, finalVal));
 
       // Para o CNC: 0 = superfície (Z=0), 1 = profundidade máxima (-maxDepth)
@@ -885,22 +912,26 @@ function updateReliefPreviewAndStats() {
   previewDepthmap.height = Math.round(maxW * ratio);
 
   const dCtx = previewDepthmap.getContext('2d');
-  const previewData = dCtx.createImageData(width, height);
+  
+  if (!offscreenPreviewCanvas) {
+    offscreenPreviewCanvas = document.createElement('canvas');
+  }
+  offscreenPreviewCanvas.width = width;
+  offscreenPreviewCanvas.height = height;
+  const offCtx = offscreenPreviewCanvas.getContext('2d');
+  
+  const previewData = offCtx.createImageData(width, height);
+  const pData = previewData.data;
   for (let i = 0; i < depthMap.length; i++) {
-    // Visualização: 255 = superfície/branco, 0 = preto/profundo
     const v = Math.round((1 - depthMap[i]) * 255);
-    previewData.data[i * 4] = v;
-    previewData.data[i * 4 + 1] = v;
-    previewData.data[i * 4 + 2] = v;
-    previewData.data[i * 4 + 3] = 255;
+    const idx = i * 4;
+    pData[idx] = pData[idx + 1] = pData[idx + 2] = v;
+    pData[idx + 3] = 255;
   }
 
-  // Criar canvas temporário e escalar suavemente para o preview
-  const tmpC = document.createElement('canvas');
-  tmpC.width = width; tmpC.height = height;
-  tmpC.getContext('2d').putImageData(previewData, 0, 0);
+  offCtx.putImageData(previewData, 0, 0);
   dCtx.clearRect(0, 0, previewDepthmap.width, previewDepthmap.height);
-  dCtx.drawImage(tmpC, 0, 0, previewDepthmap.width, previewDepthmap.height);
+  dCtx.drawImage(offscreenPreviewCanvas, 0, 0, previewDepthmap.width, previewDepthmap.height);
 
   // Dimensões na mesa
   const aspect = reliefImageEl.width / reliefImageEl.height;
@@ -1101,7 +1132,7 @@ function setupEventListeners() {
   if (btnModeAiDepth) btnModeAiDepth.addEventListener('click', () => setReliefMode('ai-depth'));
   if (btnModeLuminance) btnModeLuminance.addEventListener('click', () => setReliefMode('luminance'));
 
-  // Sliders do modal de corte 3D — actualizar labels e preview em tempo real
+  // Sliders do modal de corte 3D — actualizar labels e preview em tempo real a 60 FPS
   const reliefSliders = [
     { el: sliderReliefDepth, lbl: lblReliefDepth },
     { el: sliderReliefDetail, lbl: lblReliefDetail },
@@ -1113,12 +1144,12 @@ function setupEventListeners() {
     if (el && lbl) {
       el.addEventListener('input', () => {
         lbl.innerText = el.value;
-        if (reliefImageEl) updateReliefPreviewAndStats();
+        if (reliefImageEl) scheduleReliefPreviewUpdate();
       });
     }
   });
   chkReliefInvert.addEventListener('change', () => {
-    if (reliefImageEl) updateReliefPreviewAndStats();
+    if (reliefImageEl) scheduleReliefPreviewUpdate();
   });
 
   // Botão de travamento de proporção
@@ -1137,7 +1168,7 @@ function setupEventListeners() {
         inputReliefH.value = Math.round((w / aspect) * 2) / 2;
       }
     }
-    updateReliefPreviewAndStats();
+    scheduleReliefPreviewUpdate();
   });
   inputReliefH.addEventListener('input', () => {
     if (reliefAspectLocked && reliefImageEl) {
@@ -1147,7 +1178,7 @@ function setupEventListeners() {
         inputReliefW.value = Math.round((h * aspect) * 2) / 2;
       }
     }
-    updateReliefPreviewAndStats();
+    scheduleReliefPreviewUpdate();
   });
 
   // Geração, Download e Cópia de G-code
