@@ -59,7 +59,7 @@ let sliderReliefDepth, sliderReliefBlur, sliderReliefContrast, sliderReliefResol
 let lblReliefDepth, lblReliefBlur, lblReliefContrast, lblReliefResolution, lblReliefDetail;
 let sliderReliefLightBalance, lblReliefLightBalance;
 let sliderReliefBgCut, lblReliefBgCut, sliderReliefLightAngle, lblReliefLightAngle, selectReliefMaterialTheme;
-let btnViewArtcam, btnViewGrayscale;
+let btnViewArtcam, btnViewGrayscale, btnReliefAutoTune;
 let chkReliefInvert, chkReliefDoublePass;
 let lblReliefSize, lblReliefLines;
 let inputReliefW, inputReliefH, btnLockAspect;
@@ -194,6 +194,7 @@ function cacheUIElements() {
   selectReliefMaterialTheme = document.getElementById('relief-material-theme');
   btnViewArtcam = document.getElementById('btn-view-artcam');
   btnViewGrayscale = document.getElementById('btn-view-grayscale');
+  btnReliefAutoTune = document.getElementById('btn-relief-auto-tune');
 
   chkReliefInvert = document.getElementById('relief-invert');
   chkReliefDoublePass = document.getElementById('relief-double-pass');
@@ -567,6 +568,112 @@ function updateAIProgress(percent, text) {
 }
 
 /**
+ * Analisa a imagem e calibra automaticamente os melhores parâmetros de relevo para CNC
+ */
+function autoTuneReliefSettings(img, showNotification = true) {
+  if (!img) return;
+
+  // 1. Criar canvas de amostragem rápida
+  const sampleW = 200;
+  const sampleH = Math.round(200 * (img.height / img.width));
+  const c = document.createElement('canvas');
+  c.width = sampleW;
+  c.height = sampleH;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, 0, sampleW, sampleH);
+
+  const imgData = ctx.getImageData(0, 0, sampleW, sampleH);
+  const px = imgData.data;
+
+  // 2. Análise de Luminância, Contraste e Assimetria de Sombras
+  let totalLuma = 0;
+  let leftLuma = 0, leftCount = 0;
+  let rightLuma = 0, rightCount = 0;
+  let edgeLumaSum = 0, edgeCount = 0;
+  let centerLumaSum = 0, centerCount = 0;
+
+  const cx = sampleW / 2;
+  const cy = sampleH / 2;
+  const centerRadiusSq = (sampleW * 0.3) * (sampleW * 0.3);
+
+  for (let y = 0; y < sampleH; y++) {
+    for (let x = 0; x < sampleW; x++) {
+      const i = (y * sampleW + x) * 4;
+      const L = (0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]) / 255;
+      totalLuma += L;
+
+      if (x < sampleW * 0.45) {
+        leftLuma += L; leftCount++;
+      } else if (x > sampleW * 0.55) {
+        rightLuma += L; rightCount++;
+      }
+
+      const distSq = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+      if (distSq < centerRadiusSq) {
+        centerLumaSum += L; centerCount++;
+      }
+      if (x < sampleW * 0.15 || x > sampleW * 0.85 || y < sampleH * 0.15 || y > sampleH * 0.85) {
+        edgeLumaSum += L; edgeCount++;
+      }
+    }
+  }
+
+  const avgLuma = totalLuma / (sampleW * sampleH);
+  const avgLeft = leftCount > 0 ? leftLuma / leftCount : 0.5;
+  const avgRight = rightCount > 0 ? rightLuma / rightCount : 0.5;
+  const lightAsymmetry = Math.abs(avgLeft - avgRight);
+  const avgEdge = edgeCount > 0 ? edgeLumaSum / edgeCount : 0.2;
+  const avgCenter = centerCount > 0 ? centerLumaSum / centerCount : 0.5;
+
+  // 3. Calibração inteligente dos parâmetros
+  const bestLightBalance = Math.min(85, Math.max(40, Math.round(45 + lightAsymmetry * 140)));
+  const bestDetail = Math.min(90, Math.max(70, Math.round(78 + (0.5 - avgLuma) * 15)));
+  const bestVolume = Math.min(1.4, Math.max(1.0, Math.round((1.1 + (avgCenter - avgLuma) * 0.3) * 10) / 10));
+
+  let bestBgCut = 20;
+  if (avgEdge < avgCenter * 0.7) {
+    bestBgCut = 25;
+  } else if (avgEdge > avgCenter * 0.85) {
+    bestBgCut = 30;
+  }
+
+  const bestDepth = 2.5;
+
+  // 4. Atualizar os cursores
+  if (sliderReliefDetail) {
+    sliderReliefDetail.value = bestDetail;
+    if (lblReliefDetail) lblReliefDetail.innerText = bestDetail;
+  }
+  if (sliderReliefLightBalance) {
+    sliderReliefLightBalance.value = bestLightBalance;
+    if (lblReliefLightBalance) lblReliefLightBalance.innerText = bestLightBalance;
+  }
+  if (sliderReliefContrast) {
+    sliderReliefContrast.value = bestVolume;
+    if (lblReliefContrast) lblReliefContrast.innerText = bestVolume;
+  }
+  if (sliderReliefBgCut) {
+    sliderReliefBgCut.value = bestBgCut;
+    if (lblReliefBgCut) lblReliefBgCut.innerText = bestBgCut;
+  }
+  if (sliderReliefDepth) {
+    sliderReliefDepth.value = bestDepth;
+    if (lblReliefDepth) lblReliefDepth.innerText = bestDepth;
+  }
+
+  // 5. Atualizar preview
+  scheduleReliefPreviewUpdate();
+
+  if (showNotification && reliefAiStatusText) {
+    const prevText = reliefAiStatusText.innerText;
+    reliefAiStatusText.innerText = `✨ Auto-calibração aplicada: Detalhe ${bestDetail}%, Luz ${bestLightBalance}%, Corte Fundo ${bestBgCut}%`;
+    setTimeout(() => {
+      if (reliefAiStatusText) reliefAiStatusText.innerText = prevText;
+    }, 4000);
+  }
+}
+
+/**
  * Executa a inferência por Inteligência Artificial na imagem carregada
  */
 async function generateAIDepthMap(img) {
@@ -617,7 +724,7 @@ async function generateAIDepthMap(img) {
     const range = Math.max(0.05, pHigh - pLow);
 
     // Pré-calcular mapa de detalhes anatómicos e traços faciais uma única vez
-    const facialFeatureMap = extractFacialFeatureMap(img, width, height);
+    const facialFeatureMap = extractFacialFeatureMap(img, width, height, 50);
 
     cachedAIDepthResult = {
       rawDepthMap: depthMap,
@@ -626,7 +733,8 @@ async function generateAIDepthMap(img) {
       pLow,
       pHigh,
       range,
-      facialFeatureMap
+      facialFeatureMap,
+      lastLightBalance: 50
     };
 
     updateAIProgress(100, '✨ Deep Map 3D por IA gerado com sucesso!');
@@ -634,7 +742,8 @@ async function generateAIDepthMap(img) {
     isProcessingAI = false;
     if (btnGenerateRelief) btnGenerateRelief.disabled = false;
 
-    updateReliefPreviewAndStats();
+    // Aplicar calibração inteligente das melhores definições para a fotografia
+    autoTuneReliefSettings(img, false);
   } catch (err) {
     console.warn('Erro ao processar imagem com IA:', err);
     isProcessingAI = false;
@@ -1377,6 +1486,9 @@ function setupEventListeners() {
   
   if (btnModeAiDepth) btnModeAiDepth.addEventListener('click', () => setReliefMode('ai-depth'));
   if (btnModeLuminance) btnModeLuminance.addEventListener('click', () => setReliefMode('luminance'));
+  if (btnReliefAutoTune) btnReliefAutoTune.addEventListener('click', () => {
+    if (reliefImageEl) autoTuneReliefSettings(reliefImageEl, true);
+  });
 
   // Sliders do modal de corte 3D — actualizar labels e preview em tempo real a 60 FPS
   const reliefSliders = [
