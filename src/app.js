@@ -2449,19 +2449,17 @@ function generateGCode() {
 
     gcodeOutputText.style.color = "var(--success)";
 
-    // 3. Montar Cabeçalho do G-code
+    // 3. Montar Cabeçalho do G-code Limpo
     let gcode = [];
     gcode.push(`G21`);
     gcode.push(`G90`);
     gcode.push(`G17`);
     if (toolModule === 'spindle') {
       gcode.push(`M3 S${spindleSpeed.toFixed(0)}`);
-      gcode.push(`G4 P1.5 ; Aguardar estabilização do fuso`);
+      gcode.push(`G4 P1.5`);
     } else if (toolModule === 'eot') {
       gcode.push(`M3 S${spindleSpeed.toFixed(0)}`);
-      gcode.push(`G4 P1.0 ; Aguardar estabilização da oscilação EOT`);
-    } else {
-      gcode.push(`; Cabeca de Arrasto (Lamina Estatica)`);
+      gcode.push(`G4 P1.0`);
     }
     gcode.push(`G0 Z${safeZ.toFixed(3)}`);
 
@@ -2471,14 +2469,10 @@ function generateGCode() {
 
     // 4A. PROCESSAR OBJECTOS DE RELEVO 3D (Raster G-code)
     if (reliefObjects.length > 0) {
-      gcode.push('; === CORTE 3D POR IMAGEM (GRAYSCALE RELIEF) ===');
       reliefObjects.forEach((fabricImg, imgIdx) => {
         const rs = fabricImg.reliefSettings;
         if (!rs) return;
 
-        // Carregar a imagem original a partir do src guardado
-        // Usar o HTMLImageElement já carregado (guardado quando o utilizador confirmou no modal).
-        // Se por algum motivo não existir, criar um novo a partir do data URL.
         const img = fabricImg.reliefImgEl || (() => {
           const i = new Image();
           i.src = fabricImg.reliefSrc;
@@ -2511,7 +2505,6 @@ function generateGCode() {
         }
 
         // Raster X
-        gcode.push(`; Imagem ${imgIdx + 1} — Raster X`);
         let lx = 0;
         for (let y = 0; y <= objHeightMM; y += toolDia) {
           const ltr = lx % 2 === 0;
@@ -2529,7 +2522,6 @@ function generateGCode() {
 
         // Raster Y (passe cruzado)
         if (rs.doublePass) {
-          gcode.push(`; Imagem ${imgIdx + 1} — Raster Y`);
           let ly = 0;
           for (let x = 0; x <= objWidthMM; x += toolDia) {
             const btt = ly % 2 === 0;
@@ -2690,9 +2682,14 @@ function generateGCode() {
     gcode.push(`G0 X0 Y0`);
     gcode.push(`M30`);
     
-    // Guardar G-code em variável global e apresentar na consola
-    lastGeneratedGCode = gcode.join('\n');
-    gcodeOutputText.value = lastGeneratedGCode;
+    // Garantir G-code 100% limpo sem quaisquer comentários (; ou ()) nem linhas vazias
+    const cleanGCode = gcode
+      .map(line => line.split(';')[0].replace(/\(.*?\)/g, '').trim())
+      .filter(line => line.length > 0)
+      .join('\n');
+
+    lastGeneratedGCode = cleanGCode;
+    gcodeOutputText.value = cleanGCode;
 
     // 6. Activar botões
     btnDownload.classList.remove('disabled');
