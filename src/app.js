@@ -57,6 +57,8 @@ let btnImport3D, fileImport3D, reliefModal, btnCloseRelief, btnCloseReliefFooter
 let previewOriginal, previewDepthmap;
 let sliderReliefDepth, sliderReliefBlur, sliderReliefContrast, sliderReliefResolution, sliderReliefDetail;
 let lblReliefDepth, lblReliefBlur, lblReliefContrast, lblReliefResolution, lblReliefDetail;
+let sliderReliefBgCut, lblReliefBgCut, sliderReliefLightAngle, lblReliefLightAngle, selectReliefMaterialTheme;
+let btnViewArtcam, btnViewGrayscale;
 let chkReliefInvert, chkReliefDoublePass;
 let lblReliefSize, lblReliefLines;
 let inputReliefW, inputReliefH, btnLockAspect;
@@ -67,6 +69,7 @@ let btnModeAiDepth, btnModeLuminance, lblDepthPreviewTitle;
 // Estado interno do motor de IA
 let reliefImageEl = null; // Imagem actualmente carregada no modal 3D
 let currentReliefMode = 'ai-depth'; // 'ai-depth' | 'luminance'
+let currentReliefViewMode = 'artcam'; // 'artcam' | 'grayscale'
 let depthPipeline = null;
 let isProcessingAI = false;
 let cachedAIDepthResult = null; // { rawDepthMap: Float32Array, width: number, height: number }
@@ -180,6 +183,15 @@ function cacheUIElements() {
   lblReliefBlur = document.getElementById('lbl-relief-blur');
   lblReliefContrast = document.getElementById('lbl-relief-contrast');
   lblReliefResolution = document.getElementById('lbl-relief-resolution');
+  
+  sliderReliefBgCut = document.getElementById('relief-bg-cut');
+  lblReliefBgCut = document.getElementById('lbl-relief-bg-cut');
+  sliderReliefLightAngle = document.getElementById('relief-light-angle');
+  lblReliefLightAngle = document.getElementById('lbl-relief-light-angle');
+  selectReliefMaterialTheme = document.getElementById('relief-material-theme');
+  btnViewArtcam = document.getElementById('btn-view-artcam');
+  btnViewGrayscale = document.getElementById('btn-view-grayscale');
+
   chkReliefInvert = document.getElementById('relief-invert');
   chkReliefDoublePass = document.getElementById('relief-double-pass');
   lblReliefSize = document.getElementById('lbl-relief-size');
@@ -808,15 +820,109 @@ function scheduleReliefPreviewUpdate() {
 }
 
 /**
+ * Renderiza o relevo 3D sombreado com luz direcional Phong (Estilo ArtCAM / Vectric)
+ */
+function renderArtCAMShading(depthMap, width, height, lightAngleDeg, materialTheme, outputPixels) {
+  const rad = ((lightAngleDeg !== undefined ? lightAngleDeg : 315) * Math.PI) / 180;
+  // Direção da luz no espaço 3D (com inclinação de 45°)
+  const lx = Math.cos(rad);
+  const ly = Math.sin(rad);
+  const lz = 0.85;
+  const lLen = Math.hypot(lx, ly, lz);
+  const nlx = lx / lLen, nly = ly / lLen, nlz = lz / lLen;
+
+  // Paleta de materiais
+  let baseR = 225, baseG = 175, baseB = 40; // Ouro / Latão ArtCAM (#e1af28)
+  let ambientR = 55, ambientG = 40, ambientB = 15;
+  let specPower = 16;
+  let specIntensity = 0.55;
+
+  if (materialTheme === 'carved-wood') {
+    baseR = 175; baseG = 105; baseB = 50; // Madeira Nogueira
+    ambientR = 45; ambientG = 25; ambientB = 12;
+    specPower = 8;
+    specIntensity = 0.25;
+  } else if (materialTheme === 'sculptor-clay') {
+    baseR = 215; baseG = 210; baseB = 200; // Argila / Gesso
+    ambientR = 50; ambientG = 50; ambientB = 50;
+    specPower = 6;
+    specIntensity = 0.2;
+  }
+
+  const scaleZ = 16.0; // Multiplicador de gradiente para relevo expressivo
+
+  for (let y = 0; y < height; y++) {
+    const ym = Math.max(0, y - 1);
+    const yp = Math.min(height - 1, y + 1);
+    for (let x = 0; x < width; x++) {
+      const xm = Math.max(0, x - 1);
+      const xp = Math.min(width - 1, x + 1);
+
+      const idx = y * width + x;
+      const z = depthMap[idx]; // 0 = superfície / alto, 1 = fundo / profundo
+      const outIdx = idx * 4;
+
+      // Fundo plano cortado
+      if (z >= 0.999) {
+        outputPixels[outIdx] = 15;
+        outputPixels[outIdx + 1] = 20;
+        outputPixels[outIdx + 2] = 28;
+        outputPixels[outIdx + 3] = 255;
+        continue;
+      }
+
+      // Gradientes centrais para cálculo das normais de superfície
+      const zL = depthMap[y * width + xm];
+      const zR = depthMap[y * width + xp];
+      const zU = depthMap[ym * width + x];
+      const zD = depthMap[yp * width + x];
+
+      const dzdx = (zL - zR) * scaleZ;
+      const dzdy = (zU - zD) * scaleZ;
+      const normLen = Math.hypot(dzdx, dzdy, 1.0);
+      const nx = dzdx / normLen;
+      const ny = dzdy / normLen;
+      const nz = 1.0 / normLen;
+
+      // Iluminação Difusa (Lambert)
+      const dot = Math.max(0, nx * nlx + ny * nly + nz * nlz);
+
+      // Reflexo Especular (Blinn-Phong)
+      const hx = nlx, hy = nly, hz = nlz + 1.0;
+      const hLen = Math.hypot(hx, hy, hz);
+      const specDot = Math.max(0, nx * (hx / hLen) + ny * (hy / hLen) + nz * (hz / hLen));
+      const spec = Math.pow(specDot, specPower) * specIntensity;
+
+      // Elevação modula brilho global
+      const heightGain = 0.8 + (1 - z) * 0.35;
+
+      const r = Math.min(255, Math.round(ambientR + baseR * dot * heightGain + spec * 255));
+      const g = Math.min(255, Math.round(ambientG + baseG * dot * heightGain + spec * 235));
+      const b = Math.min(255, Math.round(ambientB + baseB * dot * heightGain + spec * 180));
+
+      outputPixels[outIdx] = r;
+      outputPixels[outIdx + 1] = g;
+      outputPixels[outIdx + 2] = b;
+      outputPixels[outIdx + 3] = 255;
+    }
+  }
+}
+
+/**
  * Processa a imagem para gerar um mapa de profundidade Float32Array [0..1]
  * 0 = superfície (Z=0), 1 = corte mais fundo (Z=-maxDepth)
  */
 function processImageToDepthMap(img, options) {
-  const { blur, gamma, invert, scaleFactor, mode, detail } = options;
+  const { blur, gamma, invert, scaleFactor, mode, detail, bgCut } = options;
+
+  let depthMap = null;
+  let finalW = 0, finalH = 0;
 
   // CASO 1: MODO IA DEEP MAP COM DADOS EM CACHE (Zero lag em tempo real)
   if (mode === 'ai-depth' && cachedAIDepthResult) {
     const { rawDepthMap, width, height, pLow, pHigh, range, facialDetails } = cachedAIDepthResult;
+    finalW = width;
+    finalH = height;
 
     // 1. Criar base volumétrica suavizada (o blur só afeta a base 3D, nunca os olhos/boca)
     const baseArr = new Uint8ClampedArray(width * height * 4);
@@ -835,56 +941,68 @@ function processImageToDepthMap(img, options) {
 
     // 2. Usar mapa de detalhes faciais em cache
     const fDetails = facialDetails || extractHighFrequencyDetails(img, width, height);
-    const detailWeight = ((detail !== undefined ? detail : 45) / 100) * 0.75;
+    const detailWeight = ((detail !== undefined ? detail : 65) / 100) * 0.75;
 
     // 3. Combinar envelope volumétrico com detalhes nítidos preservados
-    const depthMap = new Float32Array(width * height);
+    depthMap = new Float32Array(width * height);
     for (let i = 0; i < width * height; i++) {
       const baseNorm = smoothedBase[i * 4] / 255;
       let finalVal = baseNorm + (fDetails[i] * detailWeight);
       finalVal = Math.min(1, Math.max(0, finalVal));
 
       // Para o CNC: 0 = superfície (Z=0), 1 = profundidade máxima (-maxDepth)
-      const depth = invert ? finalVal : (1 - finalVal);
-      depthMap[i] = Math.min(1, Math.max(0, depth));
+      const d = invert ? finalVal : (1 - finalVal);
+      depthMap[i] = Math.min(1, Math.max(0, d));
     }
-    return { depthMap, width, height };
+  } else {
+    // CASO 2: MODO LUMINÂNCIA CLÁSSICA (2D)
+    const tmpCanvas = document.createElement('canvas');
+    finalW = Math.max(1, Math.round(img.width * scaleFactor));
+    finalH = Math.max(1, Math.round(img.height * scaleFactor));
+    tmpCanvas.width = finalW;
+    tmpCanvas.height = finalH;
+    const tmpCtx = tmpCanvas.getContext('2d');
+    tmpCtx.drawImage(img, 0, 0, finalW, finalH);
+
+    const imageData = tmpCtx.getImageData(0, 0, finalW, finalH);
+    let pixels = imageData.data;
+
+    // Converter para escala de cinzentos (luminância perceptual ITU-R BT.601)
+    const grey = new Uint8ClampedArray(finalW * finalH * 4);
+    for (let i = 0; i < finalW * finalH; i++) {
+      const R = pixels[i * 4];
+      const G = pixels[i * 4 + 1];
+      const B = pixels[i * 4 + 2];
+      const L = Math.round(0.299 * R + 0.587 * G + 0.114 * B);
+      grey[i * 4] = grey[i * 4 + 1] = grey[i * 4 + 2] = L;
+      grey[i * 4] = 255;
+    }
+
+    const blurred = blur > 0 ? applyBoxBlur(grey, finalW, finalH, blur) : grey;
+
+    depthMap = new Float32Array(finalW * finalH);
+    for (let i = 0; i < finalW * finalH; i++) {
+      let normalised = blurred[i * 4] / 255;
+      normalised = Math.pow(normalised, gamma);
+      const d = invert ? normalised : (1 - normalised);
+      depthMap[i] = Math.min(1, Math.max(0, d));
+    }
   }
 
-  // CASO 2: MODO LUMINÂNCIA CLÁSSICA (2D)
-  const tmpCanvas = document.createElement('canvas');
-  const targetW = Math.max(1, Math.round(img.width * scaleFactor));
-  const targetH = Math.max(1, Math.round(img.height * scaleFactor));
-  tmpCanvas.width = targetW;
-  tmpCanvas.height = targetH;
-  const tmpCtx = tmpCanvas.getContext('2d');
-  tmpCtx.drawImage(img, 0, 0, targetW, targetH);
-
-  const imageData = tmpCtx.getImageData(0, 0, targetW, targetH);
-  let pixels = imageData.data;
-
-  // Converter para escala de cinzentos (luminância perceptual ITU-R BT.601)
-  const grey = new Uint8ClampedArray(targetW * targetH * 4);
-  for (let i = 0; i < targetW * targetH; i++) {
-    const R = pixels[i * 4];
-    const G = pixels[i * 4 + 1];
-    const B = pixels[i * 4 + 2];
-    const L = Math.round(0.299 * R + 0.587 * G + 0.114 * B);
-    grey[i * 4] = grey[i * 4 + 1] = grey[i * 4 + 2] = L;
-    grey[i * 4 + 3] = 255;
+  // 4. Corte do Plano de Fundo (Isolamento do Sujeito estilo ArtCAM)
+  const cutPct = (bgCut !== undefined ? bgCut : 15) / 100;
+  if (cutPct > 0 && depthMap) {
+    const threshold = 1.0 - cutPct;
+    for (let i = 0; i < depthMap.length; i++) {
+      if (depthMap[i] >= threshold) {
+        depthMap[i] = 1.0; // Nivelar o fundo em plano base zero
+      } else {
+        depthMap[i] = depthMap[i] / threshold;
+      }
+    }
   }
 
-  const blurred = blur > 0 ? applyBoxBlur(grey, targetW, targetH, blur) : grey;
-
-  const depthMap = new Float32Array(targetW * targetH);
-  for (let i = 0; i < targetW * targetH; i++) {
-    let normalised = blurred[i * 4] / 255;
-    normalised = Math.pow(normalised, gamma);
-    const depth = invert ? normalised : (1 - normalised);
-    depthMap[i] = Math.min(1, Math.max(0, depth));
-  }
-
-  return { depthMap, width: targetW, height: targetH };
+  return { depthMap, width: finalW, height: finalH };
 }
 
 /**
@@ -899,13 +1017,16 @@ function updateReliefPreviewAndStats() {
   const resolutionPct = parseInt(sliderReliefResolution.value);
   const scaleFactor = resolutionPct / 100;
   const toolDia = parseFloat(inputToolDia?.value) || 3.175;
-  const detail = sliderReliefDetail ? parseFloat(sliderReliefDetail.value) : 45;
+  const detail = sliderReliefDetail ? parseFloat(sliderReliefDetail.value) : 65;
+  const bgCut = sliderReliefBgCut ? parseFloat(sliderReliefBgCut.value) : 15;
+  const lightAngle = sliderReliefLightAngle ? parseFloat(sliderReliefLightAngle.value) : 315;
+  const materialTheme = selectReliefMaterialTheme ? selectReliefMaterialTheme.value : 'artcam-gold';
 
   const { depthMap, width, height } = processImageToDepthMap(reliefImageEl, {
-    blur, gamma, invert, scaleFactor, mode: currentReliefMode, detail
+    blur, gamma, invert, scaleFactor, mode: currentReliefMode, detail, bgCut
   });
 
-  // Renderizar depth map no canvas de preview
+  // Renderizar preview no canvas
   const maxW = previewDepthmap.parentElement.clientWidth || 300;
   const ratio = height / width;
   previewDepthmap.width = maxW;
@@ -922,11 +1043,18 @@ function updateReliefPreviewAndStats() {
   
   const previewData = offCtx.createImageData(width, height);
   const pData = previewData.data;
-  for (let i = 0; i < depthMap.length; i++) {
-    const v = Math.round((1 - depthMap[i]) * 255);
-    const idx = i * 4;
-    pData[idx] = pData[idx + 1] = pData[idx + 2] = v;
-    pData[idx + 3] = 255;
+
+  if (currentReliefViewMode === 'artcam') {
+    // Renderização com iluminação e relevo 3D estilo ArtCAM
+    renderArtCAMShading(depthMap, width, height, lightAngle, materialTheme, pData);
+  } else {
+    // Renderização em escala de cinzentos (Mapa Z técnico)
+    for (let i = 0; i < depthMap.length; i++) {
+      const v = Math.round((1 - depthMap[i]) * 255);
+      const idx = i * 4;
+      pData[idx] = pData[idx + 1] = pData[idx + 2] = v;
+      pData[idx + 3] = 255;
+    }
   }
 
   offCtx.putImageData(previewData, 0, 0);
@@ -970,11 +1098,12 @@ function placeReliefImageOnCanvas() {
   const scaleFactor = resolutionPct / 100;
   const maxDepth = parseFloat(sliderReliefDepth.value);
   const doublePass = chkReliefDoublePass.checked;
-  const detail = sliderReliefDetail ? parseFloat(sliderReliefDetail.value) : 45;
+  const detail = sliderReliefDetail ? parseFloat(sliderReliefDetail.value) : 65;
+  const bgCut = sliderReliefBgCut ? parseFloat(sliderReliefBgCut.value) : 15;
 
   // Extrair o Float32Array final do mapa de profundidade
   const { depthMap, width: dmW, height: dmH } = processImageToDepthMap(reliefImageEl, {
-    blur, gamma, invert, scaleFactor, mode: currentReliefMode, detail
+    blur, gamma, invert, scaleFactor, mode: currentReliefMode, detail, bgCut
   });
 
   const reliefSettings = {
@@ -985,6 +1114,7 @@ function placeReliefImageOnCanvas() {
     maxDepth,
     doublePass,
     detail,
+    bgCut,
     mode: currentReliefMode,
     srcWidth: reliefImageEl.width,
     srcHeight: reliefImageEl.height
@@ -1136,8 +1266,10 @@ function setupEventListeners() {
   const reliefSliders = [
     { el: sliderReliefDepth, lbl: lblReliefDepth },
     { el: sliderReliefDetail, lbl: lblReliefDetail },
-    { el: sliderReliefBlur, lbl: lblReliefBlur },
     { el: sliderReliefContrast, lbl: lblReliefContrast },
+    { el: sliderReliefBgCut, lbl: lblReliefBgCut },
+    { el: sliderReliefLightAngle, lbl: lblReliefLightAngle },
+    { el: sliderReliefBlur, lbl: lblReliefBlur },
     { el: sliderReliefResolution, lbl: lblReliefResolution }
   ];
   reliefSliders.forEach(({ el, lbl }) => {
@@ -1148,6 +1280,31 @@ function setupEventListeners() {
       });
     }
   });
+
+  if (selectReliefMaterialTheme) {
+    selectReliefMaterialTheme.addEventListener('change', () => {
+      if (reliefImageEl) scheduleReliefPreviewUpdate();
+    });
+  }
+
+  // Alternador de Visualização ArtCAM vs Mapa Z
+  if (btnViewArtcam && btnViewGrayscale) {
+    btnViewArtcam.addEventListener('click', () => {
+      currentReliefViewMode = 'artcam';
+      btnViewArtcam.classList.add('active');
+      btnViewGrayscale.classList.remove('active');
+      if (lblDepthPreviewTitle) lblDepthPreviewTitle.innerText = 'Relevo 3D Esculpido (ArtCAM)';
+      if (reliefImageEl) scheduleReliefPreviewUpdate();
+    });
+    btnViewGrayscale.addEventListener('click', () => {
+      currentReliefViewMode = 'grayscale';
+      btnViewGrayscale.classList.add('active');
+      btnViewArtcam.classList.remove('active');
+      if (lblDepthPreviewTitle) lblDepthPreviewTitle.innerText = 'Mapa Z (Escala de Cinzentos)';
+      if (reliefImageEl) scheduleReliefPreviewUpdate();
+    });
+  }
+
   chkReliefInvert.addEventListener('change', () => {
     if (reliefImageEl) scheduleReliefPreviewUpdate();
   });

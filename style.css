@@ -967,4 +967,28 @@ input[type="number"]:focus, select:focus {
   box-shadow: 0 0 12px rgba(139, 92, 246, 0.3);
 }
 
+/* ---- BOTÕES DE ALTERNÂNCIA DE PRÉ-VISUALIZAÇÃO 3D / ARTCAM ---- */
+.view-btn {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.view-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+.view-btn.active {
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.25), rgba(202, 138, 4, 0.35));
+  border-color: #eab308;
+  color: #fef08a;
+  box-shadow: 0 0 8px rgba(234, 179, 8, 0.3);
+}
+
+
 

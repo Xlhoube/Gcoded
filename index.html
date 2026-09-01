@@ -362,7 +362,13 @@
             <canvas id="preview-original" class="preview-canvas"></canvas>
           </div>
           <div class="relief-preview-box">
-            <span class="preview-label" id="lbl-depth-preview-title">Mapa de Profundidade 3D (Deep Map)</span>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span class="preview-label" id="lbl-depth-preview-title">Relevo 3D Esculpido (ArtCAM)</span>
+              <div class="preview-render-toggle" style="display: flex; gap: 0.3rem;">
+                <button type="button" id="btn-view-artcam" class="view-btn active" title="Visualização 3D com luz e sombras estilo ArtCAM">🏆 3D ArtCAM</button>
+                <button type="button" id="btn-view-grayscale" class="view-btn" title="Visualização técnica em escala de cinzentos">🗺️ Mapa Z</button>
+              </div>
+            </div>
             <canvas id="preview-depthmap" class="preview-canvas"></canvas>
           </div>
         </div>
@@ -376,13 +382,18 @@
           </div>
 
           <div class="relief-control-row">
-            <label for="relief-detail">👁️ Detalhe Facial (Olhos, Boca &amp; Traços): <strong id="lbl-relief-detail">45</strong>%</label>
-            <input type="range" id="relief-detail" min="0" max="100" step="5" value="45">
+            <label for="relief-detail">👁️ Detalhe Facial (Olhos, Boca &amp; Traços): <strong id="lbl-relief-detail">65</strong>%</label>
+            <input type="range" id="relief-detail" min="0" max="100" step="5" value="65">
           </div>
 
           <div class="relief-control-row">
             <label for="relief-contrast">🏔️ Volume 3D / Curvatura Facial: <strong id="lbl-relief-contrast">1.2</strong></label>
             <input type="range" id="relief-contrast" min="0.5" max="3.0" step="0.1" value="1.2">
+          </div>
+
+          <div class="relief-control-row">
+            <label for="relief-bg-cut">✂️ Isolamento do Sujeito (Corte de Fundo): <strong id="lbl-relief-bg-cut">15</strong>%</label>
+            <input type="range" id="relief-bg-cut" min="0" max="60" step="5" value="15">
           </div>
 
           <div class="relief-dims-row">
@@ -410,8 +421,20 @@
 
           <!-- Ajustes Opcionais / Avançados -->
           <details class="relief-advanced-details" style="margin-top: 0.2rem;">
-            <summary style="font-size: 0.78rem; color: #94a3b8; cursor: pointer;">⚙️ Suavização / Resolução</summary>
+            <summary style="font-size: 0.78rem; color: #94a3b8; cursor: pointer;">⚙️ Iluminação 3D &amp; Filtros Avançados</summary>
             <div style="display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px solid rgba(255,255,255,0.05);">
+              <div class="relief-control-row">
+                <label for="relief-light-angle">☀️ Ângulo da Luz 3D: <strong id="lbl-relief-light-angle">315</strong>°</label>
+                <input type="range" id="relief-light-angle" min="0" max="360" step="15" value="315">
+              </div>
+              <div class="relief-control-row">
+                <label for="relief-material-theme">🎨 Material da Simulação</label>
+                <select id="relief-material-theme" style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 0.3rem; border-radius: 6px; font-size: 0.8rem;">
+                  <option value="artcam-gold" selected>🏆 Dourado / Latão (Estilo ArtCAM)</option>
+                  <option value="carved-wood">🪵 Madeira Nogueira Esculpida</option>
+                  <option value="sculptor-clay">🏺 Argila / Gesso de Escultor</option>
+                </select>
+              </div>
               <div class="relief-control-row">
                 <label for="relief-blur">Suavização de Ruído (Blur): <strong id="lbl-relief-blur">0</strong></label>
                 <input type="range" id="relief-blur" min="0" max="8" step="1" value="0">
