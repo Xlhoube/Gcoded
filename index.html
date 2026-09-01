@@ -371,8 +371,18 @@
         <div class="relief-controls">
 
           <div class="relief-control-row">
-            <label for="relief-max-depth">Profundidade do Relevo (mm): <strong id="lbl-relief-depth">2.0</strong> mm</label>
+            <label for="relief-max-depth">Profundidade Z do Relevo: <strong id="lbl-relief-depth">2.0</strong> mm</label>
             <input type="range" id="relief-max-depth" min="0.5" max="15" step="0.5" value="2.0">
+          </div>
+
+          <div class="relief-control-row">
+            <label for="relief-detail">👁️ Detalhe Facial (Olhos, Boca &amp; Traços): <strong id="lbl-relief-detail">45</strong>%</label>
+            <input type="range" id="relief-detail" min="0" max="100" step="5" value="45">
+          </div>
+
+          <div class="relief-control-row">
+            <label for="relief-contrast">🏔️ Volume 3D / Curvatura Facial: <strong id="lbl-relief-contrast">1.2</strong></label>
+            <input type="range" id="relief-contrast" min="0.5" max="3.0" step="0.1" value="1.2">
           </div>
 
           <div class="relief-dims-row">
@@ -399,16 +409,12 @@
           </div>
 
           <!-- Ajustes Opcionais / Avançados -->
-          <details class="relief-advanced-details" style="margin-top: 0.4rem;">
-            <summary style="font-size: 0.78rem; color: #94a3b8; cursor: pointer;">⚙️ Opções Avançadas de Filtro</summary>
+          <details class="relief-advanced-details" style="margin-top: 0.2rem;">
+            <summary style="font-size: 0.78rem; color: #94a3b8; cursor: pointer;">⚙️ Suavização / Resolução</summary>
             <div style="display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px solid rgba(255,255,255,0.05);">
               <div class="relief-control-row">
-                <label for="relief-blur">Suavização (Blur): <strong id="lbl-relief-blur">1</strong></label>
-                <input type="range" id="relief-blur" min="0" max="8" step="1" value="1">
-              </div>
-              <div class="relief-control-row">
-                <label for="relief-contrast">Contraste / Gama: <strong id="lbl-relief-contrast">1.0</strong></label>
-                <input type="range" id="relief-contrast" min="0.5" max="2.0" step="0.1" value="1.0">
+                <label for="relief-blur">Suavização de Ruído (Blur): <strong id="lbl-relief-blur">0</strong></label>
+                <input type="range" id="relief-blur" min="0" max="8" step="1" value="0">
               </div>
               <div class="relief-control-row">
                 <label for="relief-resolution">Amostragem: <strong id="lbl-relief-resolution">100</strong>%</label>

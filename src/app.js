@@ -55,8 +55,8 @@ let btnExportTools, btnImportTools, fileImportTools;
 // Elementos do Motor de Corte 3D por Imagem (AI Deep Map & Relief Carving)
 let btnImport3D, fileImport3D, reliefModal, btnCloseRelief, btnCloseReliefFooter, btnGenerateRelief;
 let previewOriginal, previewDepthmap;
-let sliderReliefDepth, sliderReliefBlur, sliderReliefContrast, sliderReliefResolution;
-let lblReliefDepth, lblReliefBlur, lblReliefContrast, lblReliefResolution;
+let sliderReliefDepth, sliderReliefBlur, sliderReliefContrast, sliderReliefResolution, sliderReliefDetail;
+let lblReliefDepth, lblReliefBlur, lblReliefContrast, lblReliefResolution, lblReliefDetail;
 let chkReliefInvert, chkReliefDoublePass;
 let lblReliefSize, lblReliefLines;
 let inputReliefW, inputReliefH, btnLockAspect;
@@ -171,10 +171,12 @@ function cacheUIElements() {
   previewOriginal = document.getElementById('preview-original');
   previewDepthmap = document.getElementById('preview-depthmap');
   sliderReliefDepth = document.getElementById('relief-max-depth');
+  sliderReliefDetail = document.getElementById('relief-detail');
   sliderReliefBlur = document.getElementById('relief-blur');
   sliderReliefContrast = document.getElementById('relief-contrast');
   sliderReliefResolution = document.getElementById('relief-resolution');
   lblReliefDepth = document.getElementById('lbl-relief-depth');
+  lblReliefDetail = document.getElementById('lbl-relief-detail');
   lblReliefBlur = document.getElementById('lbl-relief-blur');
   lblReliefContrast = document.getElementById('lbl-relief-contrast');
   lblReliefResolution = document.getElementById('lbl-relief-resolution');
@@ -733,31 +735,95 @@ function applyBoxBlur(pixels, width, height, radius) {
 }
 
 /**
+ * Extrai detalhes de alta frequência (olhos, boca, traços faciais, cabelo) da imagem original
+ */
+function extractHighFrequencyDetails(img, targetW, targetH) {
+  const tmpCanvas = document.createElement('canvas');
+  tmpCanvas.width = targetW;
+  tmpCanvas.height = targetH;
+  const ctx = tmpCanvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, targetW, targetH);
+
+  const imgData = ctx.getImageData(0, 0, targetW, targetH);
+  const px = imgData.data;
+
+  // 1. Converter para luminância perceptual [0..1]
+  const luma = new Float32Array(targetW * targetH);
+  const greyArr = new Uint8ClampedArray(targetW * targetH * 4);
+  for (let i = 0; i < targetW * targetH; i++) {
+    const val = (0.299 * px[i * 4] + 0.587 * px[i * 4 + 1] + 0.114 * px[i * 4 + 2]) / 255;
+    luma[i] = val;
+    const g = Math.round(val * 255);
+    greyArr[i * 4] = greyArr[i * 4 + 1] = greyArr[i * 4 + 2] = g;
+    greyArr[i * 4 + 3] = 255;
+  }
+
+  // 2. Criar versão suavizada (Low-Pass) usando box blur com raio médio
+  const blurred = applyBoxBlur(greyArr, targetW, targetH, 3);
+
+  // 3. Detalhes de alta frequência = Original - Suavizada (centrado em 0)
+  const details = new Float32Array(targetW * targetH);
+  for (let i = 0; i < targetW * targetH; i++) {
+    const blurVal = blurred[i * 4] / 255;
+    details[i] = luma[i] - blurVal;
+  }
+  return details;
+}
+
+/**
  * Processa a imagem para gerar um mapa de profundidade Float32Array [0..1]
  * 0 = superfície (Z=0), 1 = corte mais fundo (Z=-maxDepth)
  */
 function processImageToDepthMap(img, options) {
-  const { blur, gamma, invert, scaleFactor, mode } = options;
+  const { blur, gamma, invert, scaleFactor, mode, detail } = options;
 
-  // CASO 1: MODO IA DEEP MAP
+  // CASO 1: MODO IA DEEP MAP COM INJEÇÃO DE TRAÇOS FACIAIS & AUTO-CONTRASTE
   if (mode === 'ai-depth' && cachedAIDepthResult) {
     const { rawDepthMap, width, height } = cachedAIDepthResult;
 
-    // Converter para array de píxeis para aplicar blur/gama se pretendido
-    const grey = new Uint8ClampedArray(width * height * 4);
+    // 1. Dynamic Range Expansion: Evita face lavada em branco puro
+    // Calcular percentis 5% e 95% do relevo para esticar a gama dinâmica
+    const sampleSize = Math.min(rawDepthMap.length, 5000);
+    const sample = new Float32Array(sampleSize);
+    const step = Math.floor(rawDepthMap.length / sampleSize);
+    for (let i = 0; i < sampleSize; i++) {
+      sample[i] = rawDepthMap[i * step];
+    }
+    sample.sort();
+    const pLow = sample[Math.floor(sampleSize * 0.05)] || 0;
+    const pHigh = sample[Math.floor(sampleSize * 0.95)] || 1;
+    const range = Math.max(0.05, pHigh - pLow);
+
+    // 2. Extrair detalhes de alta frequência (olhos, lábios, sobrancelhas, nariz)
+    const facialDetails = extractHighFrequencyDetails(img, width, height);
+    const detailWeight = ((detail !== undefined ? detail : 45) / 100) * 0.55;
+
+    // 3. Combinar envelope volumétrico 3D com detalhes nítidos
+    const combinedArr = new Uint8ClampedArray(width * height * 4);
     for (let i = 0; i < width * height; i++) {
-      const v = Math.round(rawDepthMap[i] * 255);
-      grey[i * 4] = grey[i * 4 + 1] = grey[i * 4 + 2] = v;
-      grey[i * 4 + 3] = 255;
+      // Normalização esticada
+      let norm = (rawDepthMap[i] - pLow) / range;
+      norm = Math.min(1, Math.max(0, norm));
+
+      // Curva de contraste gama
+      norm = Math.pow(norm, gamma);
+
+      // Injeção de traços
+      let finalVal = norm + (facialDetails[i] * detailWeight);
+      finalVal = Math.min(1, Math.max(0, finalVal));
+
+      const v = Math.round(finalVal * 255);
+      combinedArr[i * 4] = combinedArr[i * 4 + 1] = combinedArr[i * 4 + 2] = v;
+      combinedArr[i * 4 + 3] = 255;
     }
 
-    const blurred = blur > 0 ? applyBoxBlur(grey, width, height, blur) : grey;
+    // 4. Suavização de ruído (se configurada)
+    const finalPixels = blur > 0 ? applyBoxBlur(combinedArr, width, height, blur) : combinedArr;
+
     const depthMap = new Float32Array(width * height);
     for (let i = 0; i < width * height; i++) {
-      let norm = blurred[i * 4] / 255;
-      norm = Math.pow(norm, gamma);
-      // No mapa de profundidade IA: 1.0 = relevo alto (superfície Z=0), 0.0 = fundo (profundo)
-      // Para o CNC: 0 = Z=0, 1 = -maxDepth
+      const norm = finalPixels[i * 4] / 255;
+      // Para o CNC: 0 = superfície (Z=0), 1 = profundidade máxima (-maxDepth)
       const depth = invert ? norm : (1 - norm);
       depthMap[i] = Math.min(1, Math.max(0, depth));
     }
@@ -812,9 +878,10 @@ function updateReliefPreviewAndStats() {
   const resolutionPct = parseInt(sliderReliefResolution.value);
   const scaleFactor = resolutionPct / 100;
   const toolDia = parseFloat(inputToolDia?.value) || 3.175;
+  const detail = sliderReliefDetail ? parseFloat(sliderReliefDetail.value) : 45;
 
   const { depthMap, width, height } = processImageToDepthMap(reliefImageEl, {
-    blur, gamma, invert, scaleFactor, mode: currentReliefMode
+    blur, gamma, invert, scaleFactor, mode: currentReliefMode, detail
   });
 
   // Renderizar depth map no canvas de preview
@@ -878,10 +945,11 @@ function placeReliefImageOnCanvas() {
   const scaleFactor = resolutionPct / 100;
   const maxDepth = parseFloat(sliderReliefDepth.value);
   const doublePass = chkReliefDoublePass.checked;
+  const detail = sliderReliefDetail ? parseFloat(sliderReliefDetail.value) : 45;
 
   // Extrair o Float32Array final do mapa de profundidade
   const { depthMap, width: dmW, height: dmH } = processImageToDepthMap(reliefImageEl, {
-    blur, gamma, invert, scaleFactor, mode: currentReliefMode
+    blur, gamma, invert, scaleFactor, mode: currentReliefMode, detail
   });
 
   const reliefSettings = {
@@ -891,6 +959,7 @@ function placeReliefImageOnCanvas() {
     resolutionPct,
     maxDepth,
     doublePass,
+    detail,
     mode: currentReliefMode,
     srcWidth: reliefImageEl.width,
     srcHeight: reliefImageEl.height
@@ -1041,15 +1110,18 @@ function setupEventListeners() {
   // Sliders do modal de corte 3D — actualizar labels e preview em tempo real
   const reliefSliders = [
     { el: sliderReliefDepth, lbl: lblReliefDepth },
+    { el: sliderReliefDetail, lbl: lblReliefDetail },
     { el: sliderReliefBlur, lbl: lblReliefBlur },
     { el: sliderReliefContrast, lbl: lblReliefContrast },
     { el: sliderReliefResolution, lbl: lblReliefResolution }
   ];
   reliefSliders.forEach(({ el, lbl }) => {
-    el.addEventListener('input', () => {
-      lbl.innerText = el.value;
-      if (reliefImageEl) updateReliefPreviewAndStats();
-    });
+    if (el && lbl) {
+      el.addEventListener('input', () => {
+        lbl.innerText = el.value;
+        if (reliefImageEl) updateReliefPreviewAndStats();
+      });
+    }
   });
   chkReliefInvert.addEventListener('change', () => {
     if (reliefImageEl) updateReliefPreviewAndStats();
