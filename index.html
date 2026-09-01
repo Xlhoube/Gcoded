@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gcoded - Gerador CAM/CNC Offline-First</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- CDNs das Bibliotecas Gráficas e de Tracing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/imagetracerjs@1.2.6/imagetracer_v1.2.6.js"></script>
+</head>
+<body>
+  <div id="app-container">
+    
+    <!-- BARRA DE FERRAMENTAS SUPERIOR -->
+    <header id="top-bar">
+      <div class="logo">
+        <h1>Gcoded<span>CAM</span></h1>
+      </div>
+      
+      <div class="divider"></div>
+      
+      <div class="tool-group">
+        <button id="tool-select" class="tool-btn active" title="Selecionar e Mover">
+          <span class="icon">🔀</span> Seleção
+        </button>
+        <button id="tool-rect" class="tool-btn" title="Desenhar Retângulo">
+          <span class="icon">⬜</span> Retângulo
+        </button>
+        <button id="tool-circle" class="tool-btn" title="Desenhar Círculo">
+          <span class="icon">⚪</span> Círculo
+        </button>
+        <button id="tool-line" class="tool-btn" title="Desenhar Linha">
+          <span class="icon">➖</span> Linha
+        </button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="action-group">
+        <input type="file" id="file-import" accept=".svg,.png,.jpg,.jpeg" style="display: none;">
+        <button id="btn-import-trigger" class="action-btn" title="Importar SVG, PNG ou JPG">
+          📥 Importar
+        </button>
+        <button id="btn-vectorize" class="action-btn disabled" title="Converter imagem raster selecionada em contorno vetorial" disabled>
+          ⚡ Vetorizar
+        </button>
+        <input type="file" id="file-import-3d" accept=".png,.jpg,.jpeg,.webp" style="display: none;">
+        <button id="btn-import-3d" class="action-btn relief-btn" title="Importar fotografia para Corte 3D por Relevo (Grayscale Relief Carving)">
+          🖼️ Corte 3D
+        </button>
+      </div>
+
+      <div class="spacer"></div>
+
+      <div class="danger-group">
+        <button id="btn-delete" class="danger-btn disabled" title="Eliminar objecto selecionado" disabled>
+          ❌ Apagar
+        </button>
+        <button id="btn-clear" class="danger-btn" title="Limpar todo o canvas">
+          🗑️ Limpar Tudo
+        </button>
+      </div>
+    </header>
+
+    <!-- ÁREA DE TRABALHO E TRATAMENTO CNC -->
+    <main id="workspace">
+      
+      <!-- CANVAS CENTRAL -->
+      <section id="canvas-area">
+        <div id="canvas-container" style="position: relative;">
+          <div class="zoom-controls">
+            <button id="btn-zoom-in" class="zoom-btn" title="Aumentar Zoom">➕</button>
+            <button id="btn-zoom-out" class="zoom-btn" title="Diminuir Zoom">➖</button>
+            <button id="btn-reset-view" class="zoom-btn" title="Repor Vista (1:1)">🔍 1:1</button>
+          </div>
+          <canvas id="cnc-canvas"></canvas>
+        </div>
+        <div id="canvas-info">
+          <span>Escala: Grelha = 10mm x 10mm</span>
+          <span id="canvas-coords">X: 0.00 mm | Y: 0.00 mm</span>
+        </div>
+      </section>
+
+      <!-- PAINEL LATERAL DIREITO (PARÂMETROS CNC & G-CODE) -->
+      <aside id="sidebar">
+        <div class="panel-section">
+          <h2>Mesa de Corte & Material (mm)</h2>
+          <div class="input-grid">
+            <div class="input-field">
+              <label for="param-table-x">Largura Mesa (X)</label>
+              <input type="number" id="param-table-x" value="500" step="50" min="100" max="2000">
+            </div>
+            <div class="input-field">
+              <label for="param-table-y">Altura Mesa (Y)</label>
+              <input type="number" id="param-table-y" value="500" step="50" min="100" max="2000">
+            </div>
+          </div>
+          <div class="input-field" style="margin-top: 0.4rem;">
+            <label for="param-material-z">Espessura Material (Z)</label>
+            <input type="number" id="param-material-z" value="10.0" step="0.5" min="0.5" max="100">
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <h2>Origem do Trabalho (X0 Y0)</h2>
+          <div class="input-field">
+            <label for="param-origin-type">Alinhamento na Mesa</label>
+            <select id="param-origin-type">
+              <option value="bottom-left">Canto Inferior Esquerdo da Mesa</option>
+              <option value="top-left">Canto Superior Esquerdo da Mesa</option>
+              <option value="top-right">Canto Superior Direito da Mesa</option>
+              <option value="bottom-right">Canto Inferior Direito da Mesa</option>
+              <option value="center" selected>Centro da Mesa</option>
+              <option value="custom">Offset Personalizado (G54)</option>
+            </select>
+          </div>
+          <div class="input-grid" style="margin-top: 0.4rem;">
+            <div class="input-field">
+              <label for="param-wcs-x">Posição X (mm)</label>
+              <input type="number" id="param-wcs-x" value="250.0" step="5" min="0" max="2000">
+            </div>
+            <div class="input-field">
+              <label for="param-wcs-y">Posição Y (mm)</label>
+              <input type="number" id="param-wcs-y" value="250.0" step="5" min="0" max="2000">
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <h2>Parâmetros da Fresa (mm)</h2>
+          <div class="input-field tool-library-field">
+            <label for="select-tool-library">Biblioteca de Ferramentas</label>
+            <div class="tool-library-row">
+              <select id="select-tool-library">
+                <!-- Preenchido dinamicamente via JS -->
+              </select>
+              <button id="btn-open-tool-manager" class="primary-btn tool-manager-btn" style="padding: 0 0.8rem; height: 38px; font-size: 0.8rem; white-space: nowrap;">⚙️ Gerir</button>
+            </div>
+          </div>
+          <div class="input-grid">
+            <div class="input-field">
+              <label for="param-tool-module">Módulo de Trabalho</label>
+              <select id="param-tool-module">
+                <option value="spindle">Fuso (Spindle)</option>
+                <option value="eot">Faca Oscilante (EOT)</option>
+                <option value="dragtool">Lâmina de Arrasto (Drag)</option>
+              </select>
+            </div>
+            <div class="input-field">
+              <label id="lbl-spindle-speed" for="param-spindle-speed">Velocidade (RPM)</label>
+              <input type="number" id="param-spindle-speed" value="12000" step="500" min="0" max="60000">
+            </div>
+          </div>
+          <div class="input-grid" style="margin-top: 0.4rem;">
+            <div class="input-field">
+              <label for="param-tool-dia">Diâmetro Fresa/Lâmina</label>
+              <input type="number" id="param-tool-dia" value="3.175" step="0.001" min="0.1">
+            </div>
+            <div class="input-field">
+              <label for="param-safe-z">Z Segurança</label>
+              <input type="number" id="param-safe-z" value="5.0" step="0.5" min="1">
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <h2>Maquinagem & Velocidades</h2>
+          <div class="input-grid">
+            <div class="input-field">
+              <label for="param-feed-xy">Avanço XY (mm/min)</label>
+              <input type="number" id="param-feed-xy" value="1200" step="50" min="50">
+            </div>
+            <div class="input-field">
+              <label for="param-feed-z">Avanço Z (mm/min)</label>
+              <input type="number" id="param-feed-z" value="400" step="50" min="50">
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <h2>Profundidades (mm)</h2>
+          <div class="input-grid">
+            <div class="input-field">
+              <label for="param-depth-total">Profundidade Total</label>
+              <input type="number" id="param-depth-total" value="-3.0" step="0.1" max="0">
+            </div>
+            <div class="input-field">
+              <label for="param-depth-pass">Passo por Descida</label>
+              <input type="number" id="param-depth-pass" value="1.0" step="0.1" min="0.1">
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <h2>Estratégia de Percurso</h2>
+          <div class="input-field">
+            <label for="param-strategy">Alinhamento de Corte</label>
+            <select id="param-strategy">
+              <option value="on">Sobre a Linha (Gravação / Engrave)</option>
+              <option value="inside" disabled>Interior (Caixa / Pocket) - Brevemente</option>
+              <option value="outside" disabled>Exterior (Perfil / Profile) - Brevemente</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="panel-actions">
+          <button id="btn-generate" class="primary-btn">⚙️ Gerar Trajectória</button>
+          <button id="btn-download" class="secondary-btn disabled" disabled>💾 Guardar G-code (.nc)</button>
+        </div>
+
+        <div class="panel-section output-section">
+          <div class="section-header">
+            <h2>Consola G-code</h2>
+            <button id="btn-copy" class="tool-btn disabled" disabled title="Copiar código para a área de transferência">
+              📋 Copiar
+            </button>
+          </div>
+          <textarea id="gcode-output" readonly placeholder="O código G-code gerado aparecerá aqui..."></textarea>
+        </div>
+      </aside>
+
+    </main>
+  </div>
+
+  <!-- Modal de Gestão de Biblioteca de Ferramentas -->
+  <div id="tool-manager-modal" class="modal" style="display: none;">
+    <div class="modal-content tool-manager-content">
+      <div class="modal-header">
+        <h2>🛠️ Gestor de Biblioteca de Ferramentas</h2>
+        <button id="btn-close-tool-manager" class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- Lista de Ferramentas em Tabela -->
+        <div class="tool-list-container">
+          <table class="tool-manager-table">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Módulo</th>
+                <th>Diâmetro (mm)</th>
+                <th>Z Seg. (mm)</th>
+                <th>Avanço XY</th>
+                <th>Avanço Z</th>
+                <th>Passo Z</th>
+                <th>Velocidade</th>
+                <th>Acções</th>
+              </tr>
+            </thead>
+            <tbody id="tool-manager-tbody">
+              <!-- Preenchido dinamicamente via JS -->
+            </tbody>
+          </table>
+        </div>
+        
+        <!-- Formulário para Criar/Editar Ferramenta -->
+        <div class="tool-form-container">
+          <h3>➕ Adicionar Nova Ferramenta</h3>
+          <form id="tool-manager-form">
+            <div class="input-grid">
+              <div class="input-field">
+                <label for="mngr-tool-name">Nome da Ferramenta</label>
+                <input type="text" id="mngr-tool-name" placeholder="Ex: Fresa de Topo 4mm" required>
+              </div>
+              <div class="input-field">
+                <label for="mngr-tool-module">Módulo</label>
+                <select id="mngr-tool-module">
+                  <option value="spindle">Fuso (Spindle)</option>
+                  <option value="eot">Faca Oscilante (EOT)</option>
+                  <option value="dragtool">Lâmina de Arrasto (Drag)</option>
+                </select>
+              </div>
+            </div>
+            <div class="input-grid" style="margin-top: 0.5rem;">
+              <div class="input-field">
+                <label for="mngr-tool-dia">Diâmetro (mm)</label>
+                <input type="number" id="mngr-tool-dia" value="3.175" step="0.001" min="0.1" required>
+              </div>
+              <div class="input-field">
+                <label for="mngr-safe-z">Z Segurança (mm)</label>
+                <input type="number" id="mngr-safe-z" value="5.0" step="0.5" min="1" required>
+              </div>
+              <div class="input-field">
+                <label for="mngr-spindle-speed">Velocidade/RPM</label>
+                <input type="number" id="mngr-spindle-speed" value="12000" step="500" min="0">
+              </div>
+            </div>
+            <div class="input-grid" style="margin-top: 0.5rem;">
+              <div class="input-field">
+                <label for="mngr-feed-xy">Avanço XY (mm/min)</label>
+                <input type="number" id="mngr-feed-xy" value="1200" step="50" min="50" required>
+              </div>
+              <div class="input-field">
+                <label for="mngr-feed-z">Avanço Z (mm/min)</label>
+                <input type="number" id="mngr-feed-z" value="400" step="50" min="50" required>
+              </div>
+              <div class="input-field">
+                <label for="mngr-depth-pass">Passo por Descida (mm)</label>
+                <input type="number" id="mngr-depth-pass" value="1.0" step="0.1" min="0.1" required>
+              </div>
+            </div>
+            <div class="form-actions" style="margin-top: 0.8rem; display: flex; gap: 0.5rem;">
+              <button type="submit" id="btn-mngr-add-tool" class="primary-btn">💾 Salvar Ferramenta</button>
+              <button type="button" id="btn-mngr-clear-form" class="secondary-btn">Limpar Campos</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid rgba(255,255,255,0.08);">
+        <div>
+          <button id="btn-export-tools" class="secondary-btn" style="font-size: 0.8rem;">📤 Exportar Biblioteca (JSON)</button>
+          <button id="btn-import-tools" class="secondary-btn" style="font-size: 0.8rem; margin-left: 0.4rem;">📥 Importar Biblioteca</button>
+          <input type="file" id="file-import-tools" style="display: none;" accept=".json">
+        </div>
+        <button id="btn-close-tool-manager-footer" class="secondary-btn">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Corte 3D por Imagem (AI Deep Map & Relief Carving) -->
+  <div id="relief-modal" class="modal" style="display: none;">
+    <div class="modal-content relief-modal-content">
+      
+      <div class="modal-header">
+        <div>
+          <h2>🖼️ Deep Map 3D por IA &mdash; Relevo CNC</h2>
+          <p style="margin: 0.2rem 0 0; font-size: 0.8rem; color: #94a3b8;">A Inteligência Artificial extrai a volumetria 3D real da fotografia (rosto, relevo e profundidade). Clica em <strong>Colocar na Mesa</strong> para avançar.</p>
+        </div>
+        <button id="btn-close-relief" class="close-btn">&times;</button>
+      </div>
+
+      <!-- Barra de Estado e Progresso do Modelo Neural IA -->
+      <div id="relief-ai-status-card" class="relief-ai-status-card">
+        <div class="ai-status-header">
+          <div class="ai-badge-group">
+            <span class="ai-badge">✨ IA no Browser (100% Local)</span>
+            <span id="relief-ai-status-text" class="ai-status-text">A inicializar modelo neural...</span>
+          </div>
+          <span id="relief-ai-percent" class="ai-percent">0%</span>
+        </div>
+        <div class="ai-progress-track">
+          <div id="relief-ai-progress-bar" class="ai-progress-bar" style="width: 0%;"></div>
+        </div>
+      </div>
+
+      <!-- Selector de Modo de Processamento -->
+      <div class="relief-mode-selector">
+        <button type="button" id="btn-mode-ai-depth" class="mode-pill active">
+          🧠 IA Deep Map (Rostos, Pessoas &amp; Formas 3D)
+        </button>
+        <button type="button" id="btn-mode-luminance" class="mode-pill">
+          📊 Luminância 2D (Litofanias &amp; Carimbos)
+        </button>
+      </div>
+
+      <div class="relief-body">
+
+        <!-- PREVIEWS LADO A LADO -->
+        <div class="relief-previews">
+          <div class="relief-preview-box">
+            <span class="preview-label">Fotografia Original</span>
+            <canvas id="preview-original" class="preview-canvas"></canvas>
+          </div>
+          <div class="relief-preview-box">
+            <span class="preview-label" id="lbl-depth-preview-title">Mapa de Profundidade 3D (Deep Map)</span>
+            <canvas id="preview-depthmap" class="preview-canvas"></canvas>
+          </div>
+        </div>
+
+        <!-- PAINEL DE CONTROLO SIMPLIFICADO -->
+        <div class="relief-controls">
+
+          <div class="relief-control-row">
+            <label for="relief-max-depth">Profundidade do Relevo (mm): <strong id="lbl-relief-depth">2.0</strong> mm</label>
+            <input type="range" id="relief-max-depth" min="0.5" max="15" step="0.5" value="2.0">
+          </div>
+
+          <div class="relief-dims-row">
+            <div class="relief-dim-group">
+              <label for="relief-width-mm">📏 Largura na Mesa (mm)</label>
+              <input type="number" id="relief-width-mm" min="1" max="3000" step="0.5" placeholder="ex: 150">
+            </div>
+            <button id="btn-lock-aspect" class="lock-aspect-btn" title="Proporção travada" data-locked="true">
+              🔒
+            </button>
+            <div class="relief-dim-group">
+              <label for="relief-height-mm">📏 Altura na Mesa (mm)</label>
+              <input type="number" id="relief-height-mm" min="1" max="3000" step="0.5" placeholder="ex: 150">
+            </div>
+          </div>
+
+          <div class="relief-toggle-row">
+            <label class="toggle-label">
+              <input type="checkbox" id="relief-invert"> Inverter Z (Alto &harr; Baixo)
+            </label>
+            <label class="toggle-label">
+              <input type="checkbox" id="relief-double-pass" checked> Varrimento Duplo (X + Y)
+            </label>
+          </div>
+
+          <!-- Ajustes Opcionais / Avançados -->
+          <details class="relief-advanced-details" style="margin-top: 0.4rem;">
+            <summary style="font-size: 0.78rem; color: #94a3b8; cursor: pointer;">⚙️ Opções Avançadas de Filtro</summary>
+            <div style="display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px solid rgba(255,255,255,0.05);">
+              <div class="relief-control-row">
+                <label for="relief-blur">Suavização (Blur): <strong id="lbl-relief-blur">1</strong></label>
+                <input type="range" id="relief-blur" min="0" max="8" step="1" value="1">
+              </div>
+              <div class="relief-control-row">
+                <label for="relief-contrast">Contraste / Gama: <strong id="lbl-relief-contrast">1.0</strong></label>
+                <input type="range" id="relief-contrast" min="0.5" max="2.0" step="0.1" value="1.0">
+              </div>
+              <div class="relief-control-row">
+                <label for="relief-resolution">Amostragem: <strong id="lbl-relief-resolution">100</strong>%</label>
+                <input type="range" id="relief-resolution" min="20" max="100" step="10" value="100">
+              </div>
+            </div>
+          </details>
+
+        </div>
+      </div>
+
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid rgba(255,255,255,0.08);">
+        <div style="font-size: 0.82rem; color: #94a3b8;">
+          Tamanho estimado: <strong id="lbl-relief-size" style="color: #a78bfa;">---</strong> | <strong id="lbl-relief-lines">---</strong>
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+          <button id="btn-close-relief-footer" class="secondary-btn">Cancelar</button>
+          <button id="btn-generate-relief" class="primary-btn">✅ Colocar na Mesa</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Menu de Contexto Personalizado (Clique Direito no Objeto) -->
+  <div id="context-menu" class="context-menu" style="display: none; position: fixed; z-index: 9999;">
+    <ul>
+      <li id="ctx-send-to-origin">📍 Enviar para Origem da Mesa</li>
+      <li id="ctx-group" style="display:none;">📦 Agrupar Selecção</li>
+      <li id="ctx-ungroup" style="display:none;">📤 Desagrupar</li>
+      <li id="ctx-delete" class="ctx-danger">🗑️ Apagar Objecto</li>
+    </ul>
+  </div>
+
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
