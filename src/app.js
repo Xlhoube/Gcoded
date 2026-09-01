@@ -839,8 +839,8 @@ function extractFacialFeatureMap(img, targetW, targetH, lightBalancePct) {
       const gy = normLuma[yp * targetW + x] - normLuma[ym * targetW + x];
       const edge = Math.hypot(gx, gy);
 
-      // Síntese expressiva: traços nítidos + relevo de bordas + anatomia facial
-      let feat = normLuma[idx] + (fine * 1.8) + (medium * 1.2) - (edge * 0.35);
+      // Síntese expressiva com gravação de sulcos anatómicos (Coin Minting / ArtCAM)
+      let feat = normLuma[idx] + (fine * 2.8) + (medium * 1.5) - (edge * 0.65);
       feat = Math.min(1, Math.max(0, feat));
       featureMap[idx] = feat;
     }
@@ -862,7 +862,7 @@ function scheduleReliefPreviewUpdate() {
 }
 
 /**
- * Renderiza o relevo 3D sombreado com luz direcional Phong (Estilo ArtCAM / Vectric)
+ * Renderiza o relevo 3D sombreado com luz direcional Phong e Oclusão de Cavidades (Estilo ArtCAM / Vectric)
  */
 function renderArtCAMShading(depthMap, width, height, lightAngleDeg, materialTheme, outputPixels) {
   const rad = ((lightAngleDeg !== undefined ? lightAngleDeg : 315) * Math.PI) / 180;
@@ -873,25 +873,25 @@ function renderArtCAMShading(depthMap, width, height, lightAngleDeg, materialThe
   const lLen = Math.hypot(lx, ly, lz);
   const nlx = lx / lLen, nly = ly / lLen, nlz = lz / lLen;
 
-  // Paleta de materiais
-  let baseR = 225, baseG = 175, baseB = 40; // Ouro / Latão ArtCAM (#e1af28)
-  let ambientR = 55, ambientG = 40, ambientB = 15;
-  let specPower = 16;
-  let specIntensity = 0.55;
+  // Paleta de materiais rica e contrastada
+  let baseR = 230, baseG = 175, baseB = 35; // Ouro ArtCAM (#e6af23)
+  let ambientR = 45, ambientG = 30, ambientB = 10;
+  let specPower = 20;
+  let specIntensity = 0.70;
 
   if (materialTheme === 'carved-wood') {
-    baseR = 175; baseG = 105; baseB = 50; // Madeira Nogueira
-    ambientR = 45; ambientG = 25; ambientB = 12;
+    baseR = 185; baseG = 110; baseB = 45; // Madeira Nogueira
+    ambientR = 35; ambientG = 20; ambientB = 8;
+    specPower = 10;
+    specIntensity = 0.35;
+  } else if (materialTheme === 'sculptor-clay') {
+    baseR = 220; baseG = 215; baseB = 205; // Argila / Gesso
+    ambientR = 45; ambientG = 45; ambientB = 45;
     specPower = 8;
     specIntensity = 0.25;
-  } else if (materialTheme === 'sculptor-clay') {
-    baseR = 215; baseG = 210; baseB = 200; // Argila / Gesso
-    ambientR = 50; ambientG = 50; ambientB = 50;
-    specPower = 6;
-    specIntensity = 0.2;
   }
 
-  const scaleZ = 16.0; // Multiplicador de gradiente para relevo expressivo
+  const scaleZ = 38.0; // Gradiente acentuado para esculpir contornos vivos (olhos, pálpebras, boca)
 
   for (let y = 0; y < height; y++) {
     const ym = Math.max(0, y - 1);
@@ -906,9 +906,9 @@ function renderArtCAMShading(depthMap, width, height, lightAngleDeg, materialThe
 
       // Fundo plano cortado
       if (z >= 0.999) {
-        outputPixels[outIdx] = 15;
-        outputPixels[outIdx + 1] = 20;
-        outputPixels[outIdx + 2] = 28;
+        outputPixels[outIdx] = 12;
+        outputPixels[outIdx + 1] = 16;
+        outputPixels[outIdx + 2] = 22;
         outputPixels[outIdx + 3] = 255;
         continue;
       }
@@ -935,12 +935,16 @@ function renderArtCAMShading(depthMap, width, height, lightAngleDeg, materialThe
       const specDot = Math.max(0, nx * (hx / hLen) + ny * (hy / hLen) + nz * (hz / hLen));
       const spec = Math.pow(specDot, specPower) * specIntensity;
 
-      // Elevação modula brilho global
-      const heightGain = 0.8 + (1 - z) * 0.35;
+      // Oclusão de Cavidades / Sulcos (Delineia pálpebras, pestanas, fendas dos lábios e narinas)
+      const laplacian = (zL + zR + zU + zD) - (4.0 * z);
+      const cavityOcclusion = Math.max(0.20, Math.min(1.0, 1.0 - laplacian * 14.0));
 
-      const r = Math.min(255, Math.round(ambientR + baseR * dot * heightGain + spec * 255));
-      const g = Math.min(255, Math.round(ambientG + baseG * dot * heightGain + spec * 235));
-      const b = Math.min(255, Math.round(ambientB + baseB * dot * heightGain + spec * 180));
+      // Elevação modula brilho global
+      const heightGain = 0.75 + (1 - z) * 0.40;
+
+      const r = Math.min(255, Math.round((ambientR + baseR * dot * heightGain + spec * 255) * cavityOcclusion));
+      const g = Math.min(255, Math.round((ambientG + baseG * dot * heightGain + spec * 235) * cavityOcclusion));
+      const b = Math.min(255, Math.round((ambientB + baseB * dot * heightGain + spec * 170) * cavityOcclusion));
 
       outputPixels[outIdx] = r;
       outputPixels[outIdx + 1] = g;
