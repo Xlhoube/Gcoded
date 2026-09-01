@@ -774,8 +774,42 @@ function applyBoxBlur(pixels, width, height, radius) {
 }
 
 /**
+ * Filtro Bilateral: Suaviza ruído e textura de casca de laranja da pele
+ * mantendo as arestas dos olhos, nariz e lábios perfeitamente nítidas
+ */
+function applyBilateralFilter(src, width, height, radius = 3, sigmaSpace = 2.5, sigmaColor = 0.08) {
+  const dst = new Float32Array(width * height);
+  const twoSpaceSq = 2 * sigmaSpace * sigmaSpace;
+  const twoColorSq = 2 * sigmaColor * sigmaColor;
+
+  for (let y = 0; y < height; y++) {
+    const yMin = Math.max(0, y - radius);
+    const yMax = Math.min(height - 1, y + radius);
+    for (let x = 0; x < width; x++) {
+      const xMin = Math.max(0, x - radius);
+      const xMax = Math.min(width - 1, x + radius);
+      const centerVal = src[y * width + x];
+
+      let sum = 0, wSum = 0;
+      for (let cy = yMin; cy <= yMax; cy++) {
+        for (let cx = xMin; cx <= xMax; cx++) {
+          const val = src[cy * width + cx];
+          const distSq = (cx - x) * (cx - x) + (cy - y) * (cy - y);
+          const colorDiffSq = (val - centerVal) * (val - centerVal);
+          const weight = Math.exp(-distSq / twoSpaceSq - colorDiffSq / twoColorSq);
+          sum += val * weight;
+          wSum += weight;
+        }
+      }
+      dst[y * width + x] = wSum > 0 ? sum / wSum : centerVal;
+    }
+  }
+  return dst;
+}
+
+/**
  * Extrai mapa multi-banda de traços e feições faciais reconhecíveis (olhos, pálpebras, nariz, lábios, expressão)
- * com normalização adaptativa de iluminação e relevo direcional Sobel
+ * com normalização adaptativa de iluminação e filtro bilateral anti-ruído
  */
 function extractFacialFeatureMap(img, targetW, targetH, lightBalancePct) {
   const tmpCanvas = document.createElement('canvas');
@@ -813,16 +847,19 @@ function extractFacialFeatureMap(img, targetW, targetH, lightBalancePct) {
     for (let i = 0; i < targetW * targetH; i++) normLuma[i] = luma[i];
   }
 
+  // 3. Suavização Bilateral da Pele: Elimina ruído granulado mantendo traços nítidos
+  const cleanLuma = applyBilateralFilter(normLuma, targetW, targetH, 3, 2.0, 0.06);
+
   for (let i = 0; i < targetW * targetH; i++) {
-    const g = Math.round(normLuma[i] * 255);
+    const g = Math.round(cleanLuma[i] * 255);
     greyArr[i * 4] = greyArr[i * 4 + 1] = greyArr[i * 4 + 2] = g;
   }
 
-  // 3. Multi-Scale Laplacian Filtering (Escalas de 2px e 6px)
+  // 4. Multi-Scale Laplacian Filtering (Escalas de 2px e 6px)
   const blurFine = applyBoxBlur(greyArr, targetW, targetH, 2);
   const blurMedium = applyBoxBlur(greyArr, targetW, targetH, 6);
 
-  // 4. Gravação de Relevo Anatómico com Sobel
+  // 5. Gravação de Relevo Anatómico sem ruído
   const featureMap = new Float32Array(targetW * targetH);
   for (let y = 0; y < targetH; y++) {
     const ym = Math.max(0, y - 1);
@@ -832,15 +869,15 @@ function extractFacialFeatureMap(img, targetW, targetH, lightBalancePct) {
       const xp = Math.min(targetW - 1, x + 1);
       const idx = y * targetW + x;
 
-      const fine = normLuma[idx] - (blurFine[idx * 4] / 255);
-      const medium = normLuma[idx] - (blurMedium[idx * 4] / 255);
+      const fine = cleanLuma[idx] - (blurFine[idx * 4] / 255);
+      const medium = cleanLuma[idx] - (blurMedium[idx * 4] / 255);
 
-      const gx = normLuma[y * targetW + xp] - normLuma[y * targetW + xm];
-      const gy = normLuma[yp * targetW + x] - normLuma[ym * targetW + x];
+      const gx = cleanLuma[y * targetW + xp] - cleanLuma[y * targetW + xm];
+      const gy = cleanLuma[yp * targetW + x] - cleanLuma[ym * targetW + x];
       const edge = Math.hypot(gx, gy);
 
-      // Síntese expressiva com gravação de sulcos anatómicos (Coin Minting / ArtCAM)
-      let feat = normLuma[idx] + (fine * 2.8) + (medium * 1.5) - (edge * 0.65);
+      // Síntese limpa e fluida (estilo ArtCAM)
+      let feat = cleanLuma[idx] + (fine * 2.2) + (medium * 1.3) - (edge * 0.40);
       feat = Math.min(1, Math.max(0, feat));
       featureMap[idx] = feat;
     }
@@ -873,25 +910,28 @@ function renderArtCAMShading(depthMap, width, height, lightAngleDeg, materialThe
   const lLen = Math.hypot(lx, ly, lz);
   const nlx = lx / lLen, nly = ly / lLen, nlz = lz / lLen;
 
-  // Paleta de materiais rica e contrastada
+  // Paleta de materiais rica e polida
   let baseR = 230, baseG = 175, baseB = 35; // Ouro ArtCAM (#e6af23)
-  let ambientR = 45, ambientG = 30, ambientB = 10;
-  let specPower = 20;
-  let specIntensity = 0.70;
+  let ambientR = 50, ambientG = 35, ambientB = 12;
+  let specPower = 18;
+  let specIntensity = 0.65;
 
   if (materialTheme === 'carved-wood') {
     baseR = 185; baseG = 110; baseB = 45; // Madeira Nogueira
-    ambientR = 35; ambientG = 20; ambientB = 8;
+    ambientR = 38; ambientG = 22; ambientB = 10;
     specPower = 10;
-    specIntensity = 0.35;
+    specIntensity = 0.30;
   } else if (materialTheme === 'sculptor-clay') {
     baseR = 220; baseG = 215; baseB = 205; // Argila / Gesso
-    ambientR = 45; ambientG = 45; ambientB = 45;
+    ambientR = 48; ambientG = 48; ambientB = 48;
     specPower = 8;
-    specIntensity = 0.25;
+    specIntensity = 0.22;
   }
 
-  const scaleZ = 38.0; // Gradiente acentuado para esculpir contornos vivos (olhos, pálpebras, boca)
+  const scaleZ = 28.0; // Gradiente calibrado para relevo suave e contornos limpos
+
+  // Pré-suavização leve para garantir brilho especular polido e sem ruído
+  const smoothZ = applyBilateralFilter(depthMap, width, height, 2, 1.5, 0.05);
 
   for (let y = 0; y < height; y++) {
     const ym = Math.max(0, y - 1);
@@ -901,7 +941,7 @@ function renderArtCAMShading(depthMap, width, height, lightAngleDeg, materialThe
       const xp = Math.min(width - 1, x + 1);
 
       const idx = y * width + x;
-      const z = depthMap[idx]; // 0 = superfície / alto, 1 = fundo / profundo
+      const z = smoothZ[idx]; // 0 = superfície / alto, 1 = fundo / profundo
       const outIdx = idx * 4;
 
       // Fundo plano cortado
@@ -914,10 +954,10 @@ function renderArtCAMShading(depthMap, width, height, lightAngleDeg, materialThe
       }
 
       // Gradientes centrais para cálculo das normais de superfície
-      const zL = depthMap[y * width + xm];
-      const zR = depthMap[y * width + xp];
-      const zU = depthMap[ym * width + x];
-      const zD = depthMap[yp * width + x];
+      const zL = smoothZ[y * width + xm];
+      const zR = smoothZ[y * width + xp];
+      const zU = smoothZ[ym * width + x];
+      const zD = smoothZ[yp * width + x];
 
       const dzdx = (zL - zR) * scaleZ;
       const dzdy = (zU - zD) * scaleZ;
@@ -937,10 +977,10 @@ function renderArtCAMShading(depthMap, width, height, lightAngleDeg, materialThe
 
       // Oclusão de Cavidades / Sulcos (Delineia pálpebras, pestanas, fendas dos lábios e narinas)
       const laplacian = (zL + zR + zU + zD) - (4.0 * z);
-      const cavityOcclusion = Math.max(0.20, Math.min(1.0, 1.0 - laplacian * 14.0));
+      const cavityOcclusion = Math.max(0.25, Math.min(1.0, 1.0 - laplacian * 10.0));
 
       // Elevação modula brilho global
-      const heightGain = 0.75 + (1 - z) * 0.40;
+      const heightGain = 0.78 + (1 - z) * 0.35;
 
       const r = Math.min(255, Math.round((ambientR + baseR * dot * heightGain + spec * 255) * cavityOcclusion));
       const g = Math.min(255, Math.round((ambientG + baseG * dot * heightGain + spec * 235) * cavityOcclusion));
@@ -1043,15 +1083,34 @@ function processImageToDepthMap(img, options) {
     }
   }
 
-  // 4. Corte do Plano de Fundo (Isolamento do Sujeito estilo ArtCAM)
+  // 4. Corte do Plano de Fundo & Isolamento de Retrato (Estilo Medalhão ArtCAM)
   const cutPct = (bgCut !== undefined ? bgCut : 15) / 100;
-  if (cutPct > 0 && depthMap) {
-    const threshold = 1.0 - cutPct;
-    for (let i = 0; i < depthMap.length; i++) {
-      if (depthMap[i] >= threshold) {
-        depthMap[i] = 1.0; // Nivelar o fundo em plano base zero
-      } else {
-        depthMap[i] = depthMap[i] / threshold;
+  if (depthMap) {
+    const threshold = Math.max(0.05, 1.0 - cutPct);
+    const cx = finalW / 2;
+    const cy = finalH / 2;
+
+    for (let y = 0; y < finalH; y++) {
+      for (let x = 0; x < finalW; x++) {
+        const i = y * finalW + x;
+        const dx = (x - cx) / (finalW * 0.46);
+        const dy = (y - cy) / (finalH * 0.52);
+        const distSq = dx * dx + dy * dy;
+        const vignette = Math.max(0, Math.min(1, 1.25 - distSq * 0.45));
+
+        let v = depthMap[i];
+        if (cutPct > 0) {
+          if (v >= threshold) {
+            v = 1.0;
+          } else {
+            v = v / threshold;
+          }
+        }
+        // Se estiver fora do foco central e houver corte de fundo, aplanar suavemente para Z=0
+        if (distSq > 0.75 && cutPct >= 0.1) {
+          v = 1.0 - (1.0 - v) * vignette;
+        }
+        depthMap[i] = Math.min(1, Math.max(0, v));
       }
     }
   }
