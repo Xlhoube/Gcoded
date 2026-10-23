@@ -4,7 +4,7 @@
 - **Nome do Projecto:** Gcoded
 - **Objectivo:** Criar um gerador de percursos de corte (CAM/toolpath generator) interativo para máquinas CNC, a correr no browser de forma 100% local e offline-first. O utilizador poderá criar ou importar desenhos, configurar parâmetros da fresadora, gerar percursos e exportar o G-code. Todos os dados são guardados localmente no browser (`localStorage`) e através de exportação de ficheiros JSON.
 - **Data de Início:** 2026-08-21
-- **Versão Actual:** v0.5.2
+- **Versão Actual:** v0.5.3
 - **Nível de Risco:** 1 (Baixo - protótipo rápido, sem base de dados remota)
 - **Ambiente de Deploy:** Vercel (servido como site estático)
 
@@ -80,6 +80,9 @@
     1. **Cache Busting Forçado:** Adicionado parâmetro de versão `src/app.js?v=0.5.2` em `index.html`, obrigando o browser a descarregar o novo código imediatamente.
     2. **Inicialização Resiliente:** Substituição de `DOMContentLoaded` cego por verificação de `document.readyState` (`if (document.readyState === 'loading') ... else init()`).
     3. **Transição Automática para 3D:** Ao gerar a trajectória de um relevo 3D, a aplicação comuta automaticamente e de forma suave para o separador `[👁️ Simulador 3D (WebGL)]` e inicia a maquinação da fresa em tempo real, eliminando qualquer dúvida visual.
+- **[2026-10-23] | DECISÃO-017 | Eliminação de ReferenceError residual em generateGCode**
+  - **Contexto:** Ao clicar em `⚙️ Gerar Trajectória`, o motor gerava `ReferenceError: selectToolModule is not defined (app.js:2535:24)` devido a uma referência residual à variável do módulo legado que foi removida na reformulação para CNC Router.
+  - **Decisão:** Removida a linha `const toolModule = selectToolModule ? selectToolModule.value : 'spindle';`, eliminando a causa raiz do erro. Forçado cache busting com `?v=0.5.3` em `index.html`.
 
 ---
 

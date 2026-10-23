@@ -2532,7 +2532,6 @@ function generateGCode() {
     const depthTotal = parseCAMParam(inputDepthTotal, -3.0);
     const depthPass = parseCAMParam(inputDepthPass, 1.0);
     const materialZ = parseCAMParam(inputMaterialZ, 10.0);
-    const toolModule = selectToolModule ? selectToolModule.value : 'spindle';
     const spindleSpeed = parseCAMParam(inputSpindleSpeed, 12000);
 
     // Validações apenas para contornos (não se aplicam ao relevo)
