@@ -4,7 +4,7 @@
 - **Nome do Projecto:** Gcoded
 - **Objectivo:** Criar um gerador de percursos de corte (CAM/toolpath generator) interativo para máquinas CNC, a correr no browser de forma 100% local e offline-first. O utilizador poderá criar ou importar desenhos, configurar parâmetros da fresadora, gerar percursos e exportar o G-code. Todos os dados são guardados localmente no browser (`localStorage`) e através de exportação de ficheiros JSON.
 - **Data de Início:** 2026-08-21
-- **Versão Actual:** v0.4.2
+- **Versão Actual:** v0.4.3
 - **Nível de Risco:** 1 (Baixo - protótipo rápido, sem base de dados remota)
 - **Ambiente de Deploy:** Vercel (servido como site estático)
 
@@ -13,8 +13,8 @@
 ## 🛠️ Stack Tecnológica & Justificação
 - **Frontend:** HTML5, Vanilla CSS e Vanilla JavaScript.
   - *Justificação:* Totalmente estático e offline-first. As bibliotecas gráficas (como Fabric.js para desenho e manipulação de vetores, e Transformers.js para inferência neural de modelos de profundidade 3D) são carregadas via CDN.
-- **Base de Dados / Persistência:** `localStorage` do browser e exportação manual para ficheiro JSON.
-  - *Justificação:* Decidido pelo utilizador para manter todos os dados locais, sem necessidade de servidores ou bases de dados externas.
+- **Base de Dados / Persistência:** `IndexedDB` para dados volumosos (mapas de profundidade e imagens de relevo 3D), `localStorage` para definições e geometrias vetoriais ligeiras, e exportação manual para ficheiro JSON.
+  - *Justificação:* O `localStorage` tem limite estrito de ~5MB, estourando rapidamente ao serializar Float32Array de relevos 3D de alta resolução. O `IndexedDB` suporta armazenamento assíncrono de centenas de megabytes no browser local sem falhas.
 - **Servidor Local de Testes:** Servidor HTTP leve externo (ex: `npx serve`, `python -m http.server` ou extensão Live Server).
   - *Justificação:* Evita problemas com permissões de escrita do Google Drive (sem `node_modules` locais) e permite testar sem restrições de CORS.
 - **Versionamento:** GitHub.
@@ -57,6 +57,9 @@
 - **[2026-10-23] | DECISÃO-012 | Retracções de Segurança CAM e Protecção de Material em Relevo**
   - **Contexto:** Subpaths de SVGs complexos (ex: ilhas/buracos) eram cortados continuamente sem levantar a fresa; contornos abertos em múltiplas passagens Z atravessavam a peça em G1 ao voltar ao início; e o relevo 3D não validava a profundidade contra a espessura do material e mergulhava à velocidade rápida XY.
   - **Decisão:** Decomposição de caminhos em subpaths atómicos com retracção `G0 Z_safe` entre cada um; verificação de contorno aberto para reposicionar em altura segura antes de cada nova passagem Z; mergulho inicial em relevo com `feedZ`; e bloqueio preventivo de segurança se `maxDepth > materialZ`.
+- **[2026-10-23] | DECISÃO-013 | Persistência Fiável de Relevo 3D e Mapas de Profundidade via IndexedDB**
+  - **Contexto:** Relevos 3D continham mapas de profundidade `Float32Array` volumosos. Guardá-los no `localStorage` gerava `QuotaExceededError` ou perda silenciosa dos dados de relevo ao fechar ou recarregar o browser, impossibilitando a regeneração posterior de G-code 3D.
+  - **Decisão:** Implementação de base de dados IndexedDB local (`gcoded_db`, store `reliefs`). O `saveAppState` isola metadados ligeiros no `localStorage` e persiste matrizes de profundidade e imagens no `IndexedDB`. O `loadAppState` reconstrói o objecto no Fabric.js restaurando `depthMap`, `reliefWidth` e `reliefHeight`, garantindo integridade na geração de G-code após reload (F5).
 
 ---
 
@@ -75,5 +78,6 @@
 - [x] Desenvolver Motor de AI Deep Map & Grayscale Relief Carving com IA no browser
 - [x] Corrigir geometria de linhas diagonais, retângulos sob zoom/pan e orientação Y de relevo 3D
 - [x] Implementar retracção de segurança entre subpaths e reposicionamento Z em contornos abertos
+- [x] Persistência fiável de dados e mapas de profundidade de relevo 3D via IndexedDB
 - [ ] Desenvolver estratégia de corte "Exterior (Profile)" com compensação de raio da fresa
 - [ ] Desenvolver estratégia de corte "Interior (Pocket)" para preenchimento de caixas

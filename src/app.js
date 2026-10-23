@@ -9,6 +9,7 @@ const TAMANHO_GRELHA_PX = TAMANHO_GRELHA_MM * ESCALA_MM_PX;
 let canvas;
 let currentTool = 'select'; // 'select' | 'rect' | 'circle' | 'line'
 let isDrawing = false;
+let isRestoringState = false;
 let origX = 0;
 let origY = 0;
 let activeShape = null;
@@ -81,6 +82,7 @@ let cachedAIDepthResult = null; // { rawDepthMap: Float32Array, width: number, h
 function init() {
   cacheUIElements();
   initCanvas();
+  window.canvas = canvas;
   initToolLibrary(); // Inicializar biblioteca de ferramentas
   setupEventListeners();
   loadAppState();
@@ -1360,7 +1362,7 @@ function placeReliefImageOnCanvas() {
   const pxW = areaW * ESCALA_MM_PX;
   const pxH = areaH * ESCALA_MM_PX;
 
-  fabric.Image.fromURL(reliefImageEl.src, (fabricImg) => {
+  fabric.Image.fromURL(reliefImageEl.src, async (fabricImg) => {
     fabricImg.set({
       left: 20,
       top: 20,
@@ -1388,7 +1390,7 @@ function placeReliefImageOnCanvas() {
 
     hideReliefModal();
     clearVisualToolpaths();
-    saveAppState();
+    await saveAppState();
   });
 }
 
@@ -2913,22 +2915,133 @@ function fallbackAlert() {
 /**
  * Persiste o estado completo no localStorage
  */
-function saveAppState() {
-  if (!canvas) return;
-
-  // Filtrar objetos visuais temporários de percursos e marcadores antes de guardar
-  const rawObjects = canvas.getObjects().filter(obj => !obj.isVisualPath && !obj.isOriginMarker);
-  
-  const tempCanvas = new fabric.Canvas(null, { width: 500, height: 500 });
-  rawObjects.forEach(obj => {
-    // Clonar para não alterar o canvas ativo
-    obj.clone(cloned => tempCanvas.add(cloned));
+/**
+ * Abre a base de dados IndexedDB local do browser para armazenamento de grande capacidade (imagens e matrizes 3D)
+ */
+function openGcodedDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('gcoded_storage', 1);
+    request.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('reliefs')) {
+        db.createObjectStore('reliefs', { keyPath: 'id' });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
   });
+}
+
+/**
+ * Guarda um mapa de relevo pesado no IndexedDB
+ */
+async function storeReliefInDB(id, reliefData) {
+  try {
+    const db = await openGcodedDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('reliefs', 'readwrite');
+      const store = tx.objectStore('reliefs');
+      store.put({ id, ...reliefData });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (err) {
+    console.warn("IndexedDB store error:", err);
+  }
+}
+
+/**
+ * Obtém dados de relevo do IndexedDB
+ */
+async function getReliefFromDB(id) {
+  try {
+    const db = await openGcodedDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('reliefs', 'readonly');
+      const store = tx.objectStore('reliefs');
+      const req = store.get(id);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    console.warn("IndexedDB fetch error:", err);
+    return null;
+  }
+}
+
+/**
+ * Remove dados antigos de relevos do IndexedDB que já não estejam no canvas
+ */
+async function cleanReliefsDB(activeIds) {
+  try {
+    const db = await openGcodedDB();
+    const tx = db.transaction('reliefs', 'readwrite');
+    const store = tx.objectStore('reliefs');
+    const getAllKeysReq = store.getAllKeys();
+    getAllKeysReq.onsuccess = () => {
+      const keys = getAllKeysReq.result;
+      keys.forEach(k => {
+        if (!activeIds.includes(k)) store.delete(k);
+      });
+    };
+  } catch (err) {
+    console.warn("IndexedDB clean error:", err);
+  }
+}
+
+/**
+ * Persiste o estado completo de forma fiável (parâmetros no localStorage + relevo em IndexedDB)
+ */
+async function saveAppState() {
+  if (!canvas || isRestoringState) return;
+
+  const rawObjects = canvas.getObjects().filter(obj => !obj.isVisualPath && !obj.isOriginMarker);
+  const activeReliefIds = [];
+
+  // Recolher metadados e persistir mapas Float32Array no IndexedDB
+  const reliefMetadata = [];
+  for (let idx = 0; idx < rawObjects.length; idx++) {
+    const obj = rawObjects[idx];
+    if (obj.isReliefImage) {
+      if (!obj.reliefId) obj.reliefId = 'relief_' + Date.now() + '_' + idx;
+      activeReliefIds.push(obj.reliefId);
+
+      // Guardar mapa e definições no IndexedDB (converter Float32Array para Array normal para compatibilidade total de clonagem estruturada)
+      const depthArray = obj.reliefDepthMap ? Array.from(obj.reliefDepthMap) : null;
+      await storeReliefInDB(obj.reliefId, {
+        reliefSettings: obj.reliefSettings,
+        reliefDepthMap: depthArray,
+        reliefDepthWidth: obj.reliefDepthWidth,
+        reliefDepthHeight: obj.reliefDepthHeight,
+        reliefSrc: obj.reliefSrc
+      });
+
+      reliefMetadata.push({
+        reliefId: obj.reliefId,
+        left: obj.left,
+        top: obj.top,
+        scaleX: obj.scaleX,
+        scaleY: obj.scaleY,
+        width: obj.width,
+        height: obj.height
+      });
+    }
+  }
+
+  // Limpar relevos apagados do IndexedDB
+  cleanReliefsDB(activeReliefIds);
+
+  // Serialização limpa dos desenhos vectoriais normais sem fugas de memória
+  const vectorObjects = rawObjects.filter(obj => !obj.isReliefImage);
+  const canvasJsonData = {
+    objects: vectorObjects.map(obj => obj.toObject(['selectable', 'evented', 'stroke', 'strokeWidth']))
+  };
 
   const appState = {
-    version: "0.3.0",
+    version: "0.4.2",
     lastModified: new Date().toLocaleString(),
-    canvasData: tempCanvas.toJSON(['selectable', 'evented', 'stroke', 'strokeWidth']),
+    canvasData: canvasJsonData,
+    reliefs: reliefMetadata,
     cncParams: {
       toolDia: parseFloat(inputToolDia.value),
       safeZ: parseFloat(inputSafeZ.value),
@@ -2952,21 +3065,22 @@ function saveAppState() {
   try {
     localStorage.setItem('gcoded_settings', JSON.stringify(appState));
   } catch (err) {
-    console.error("Erro ao persistir estado:", err);
+    console.error("Erro ao persistir estado no localStorage:", err);
   }
 }
 
 /**
- * Restaura o estado a partir do localStorage
+ * Restaura o estado a partir do localStorage e IndexedDB
  */
-function loadAppState() {
+async function loadAppState() {
   try {
+    isRestoringState = true;
     const data = localStorage.getItem('gcoded_settings');
     if (!data) return;
 
     const appState = JSON.parse(data);
     
-    // Restaurar Parâmetros
+    // 1. Restaurar Parâmetros CAM e Mesa
     if (appState.cncParams) {
       const p = appState.cncParams;
       inputToolDia.value = p.toolDia || 3.175;
@@ -2983,33 +3097,72 @@ function loadAppState() {
       inputWcsX.value = p.wcsX !== undefined ? p.wcsX : 250.0;
       inputWcsY.value = p.wcsY !== undefined ? p.wcsY : 250.0;
       
-      // Restaurar selecção da ferramenta activa
       if (p.activeToolId && selectToolLibrary) {
         selectToolLibrary.value = p.activeToolId;
       }
       
-      // Restaurar o módulo de trabalho e rotações
       updateModuleUI(p.toolModule || 'spindle', p.spindleSpeed || 12000);
-      
-      // Colocar inputs readonly se for alinhamento automático
       setWCSInputsReadonly(selectOriginType.value !== 'custom');
-      
-      // Redimensionar canvas com os limites recuperados
       updateTableSize();
     }
 
-    // Restaurar Canvas
+    // 2. Restaurar Desenhos Vectoriais
     if (appState.canvasData && appState.canvasData.objects && appState.canvasData.objects.length > 0) {
-      canvas.loadFromJSON(appState.canvasData, function() {
-        canvas.forEachObject(obj => {
-          obj.selectable = true;
-          obj.evented = true;
+      await new Promise((res) => {
+        canvas.loadFromJSON(appState.canvasData, function() {
+          canvas.forEachObject(obj => {
+            obj.selectable = true;
+            obj.evented = true;
+          });
+          canvas.requestRenderAll();
+          res();
         });
-        canvas.requestRenderAll();
       });
+    }
+
+    // 3. Restaurar Objectos de Relevo 3D do IndexedDB
+    if (appState.reliefs && Array.isArray(appState.reliefs)) {
+      for (const meta of appState.reliefs) {
+        const dbData = await getReliefFromDB(meta.reliefId);
+        if (dbData && dbData.reliefSrc) {
+          await new Promise((res) => {
+            fabric.Image.fromURL(dbData.reliefSrc, (fabricImg) => {
+              fabricImg.set({
+                left: meta.left,
+                top: meta.top,
+                scaleX: meta.scaleX,
+                scaleY: meta.scaleY,
+                originX: 'left',
+                originY: 'top',
+                opacity: 0.9,
+                borderColor: '#8b5cf6',
+                cornerColor: '#8b5cf6'
+              });
+
+              fabricImg.isReliefImage = true;
+              fabricImg.reliefId = meta.reliefId;
+              fabricImg.reliefSettings = dbData.reliefSettings;
+              fabricImg.reliefDepthMap = dbData.reliefDepthMap ? new Float32Array(dbData.reliefDepthMap) : null;
+              fabricImg.reliefDepthWidth = dbData.reliefDepthWidth;
+              fabricImg.reliefDepthHeight = dbData.reliefDepthHeight;
+              fabricImg.reliefSrc = dbData.reliefSrc;
+
+              const nativeImg = new Image();
+              nativeImg.src = dbData.reliefSrc;
+              fabricImg.reliefImgEl = nativeImg;
+
+              canvas.add(fabricImg);
+              canvas.requestRenderAll();
+              res();
+            });
+          });
+        }
+      }
     }
   } catch (err) {
     console.error("Erro ao restaurar o estado:", err);
+  } finally {
+    isRestoringState = false;
   }
 }
 
