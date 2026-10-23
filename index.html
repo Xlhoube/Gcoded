@@ -5,9 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gcoded - Gerador CAM/CNC Offline-First</title>
   <link rel="stylesheet" href="style.css">
-  <!-- CDNs das Bibliotecas Gráficas e de Tracing -->
+  <!-- CDNs das Bibliotecas Gráficas, Tracing e 3D WebGL -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/imagetracerjs@1.2.6/imagetracer_v1.2.6.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
   <div id="app-container">
@@ -66,8 +68,20 @@
     <!-- ÁREA DE TRABALHO E TRATAMENTO CNC -->
     <main id="workspace">
       
-      <!-- CANVAS CENTRAL -->
+      <!-- CANVAS CENTRAL & SIMULADOR 3D -->
       <section id="canvas-area">
+        <!-- Barra de Selecção de Vista (Editor 2D vs Simulador 3D) -->
+        <div class="view-mode-bar">
+          <div class="view-tabs">
+            <button id="tab-view-2d" class="view-tab active">🎨 Editor 2D (Desenho)</button>
+            <button id="tab-view-3d" class="view-tab">👁️ Simulador 3D (WebGL)</button>
+          </div>
+          <div id="sim-status-badge" class="sim-status-badge">
+            <span class="status-dot"></span> <span id="sim-status-text">Sem trajectória gerada</span>
+          </div>
+        </div>
+
+        <!-- Vista 2D (Fabric.js) -->
         <div id="canvas-container" style="position: relative;">
           <div class="zoom-controls">
             <button id="btn-zoom-in" class="zoom-btn" title="Aumentar Zoom">➕</button>
@@ -76,13 +90,57 @@
           </div>
           <canvas id="cnc-canvas"></canvas>
         </div>
+
+        <!-- Vista 3D (Three.js WebGL Simulator) -->
+        <div id="sim3d-container" style="display: none; position: relative; width: 100%; height: 100%;">
+          <canvas id="three-canvas"></canvas>
+          
+          <!-- Controlos Flutuantes da Simulação 3D -->
+          <div class="sim-control-panel">
+            <div class="sim-playback-row">
+              <button id="btn-sim-play" class="sim-btn primary" title="Iniciar / Pausar Simulação">▶️ Reproduzir</button>
+              <button id="btn-sim-reset" class="sim-btn" title="Reiniciar Percurso">⏮️</button>
+              
+              <div class="sim-speed-group">
+                <label for="sim-speed-select">Velocidade:</label>
+                <select id="sim-speed-select">
+                  <option value="1">1x</option>
+                  <option value="2">2x</option>
+                  <option value="5" selected>5x</option>
+                  <option value="15">15x</option>
+                  <option value="50">50x</option>
+                </select>
+              </div>
+
+              <div class="sim-views-group">
+                <button id="btn-cam-iso" class="sim-btn-view" title="Vista Isométrica 3D">📐 Iso</button>
+                <button id="btn-cam-top" class="sim-btn-view" title="Vista Superior (Plano XY)">🔝 Topo</button>
+                <button id="btn-cam-front" class="sim-btn-view" title="Vista Frontal (Plano XZ)">📏 Frente</button>
+              </div>
+            </div>
+
+            <div class="sim-timeline-row">
+              <input type="range" id="sim-timeline" min="0" max="100" value="0" step="0.1" title="Progresso da Fresagem">
+              <span id="sim-progress-text">0.0%</span>
+            </div>
+
+            <div class="sim-dro-row">
+              <div class="dro-item"><span>X:</span> <strong id="dro-x">0.00</strong> mm</div>
+              <div class="dro-item"><span>Y:</span> <strong id="dro-y">0.00</strong> mm</div>
+              <div class="dro-item"><span>Z:</span> <strong id="dro-z">0.00</strong> mm</div>
+              <div class="dro-item"><span>F:</span> <strong id="dro-f">0</strong> mm/min</div>
+              <div class="dro-item"><span>Linha:</span> <strong id="dro-line">0 / 0</strong></div>
+            </div>
+          </div>
+        </div>
+
         <div id="canvas-info">
           <span>Escala: Grelha = 10mm x 10mm</span>
           <span id="canvas-coords">X: 0.00 mm | Y: 0.00 mm</span>
         </div>
       </section>
 
-      <!-- PAINEL LATERAL DIREITO (PARÂMETROS CNC & G-CODE) -->
+      <!-- PAINEL LATERAL DIREITO (PARÂMETROS CNC EXCLUSIVO PARA FRESAS & ROUTERS) -->
       <aside id="sidebar">
         <div class="panel-section">
           <h2>Mesa de Corte & Material (mm)</h2>
@@ -128,9 +186,9 @@
         </div>
 
         <div class="panel-section">
-          <h2>Parâmetros da Fresa (mm)</h2>
+          <h2>Parâmetros da Fresa (CNC Router)</h2>
           <div class="input-field tool-library-field">
-            <label for="select-tool-library">Biblioteca de Ferramentas</label>
+            <label for="select-tool-library">Biblioteca de Fresas</label>
             <div class="tool-library-row">
               <select id="select-tool-library">
                 <!-- Preenchido dinamicamente via JS -->
@@ -140,41 +198,46 @@
           </div>
           <div class="input-grid">
             <div class="input-field">
-              <label for="param-tool-module">Módulo de Trabalho</label>
-              <select id="param-tool-module">
-                <option value="spindle">Fuso (Spindle)</option>
-                <option value="eot">Faca Oscilante (EOT)</option>
-                <option value="dragtool">Lâmina de Arrasto (Drag)</option>
+              <label for="param-tool-type">Tipo de Fresa</label>
+              <select id="param-tool-type">
+                <option value="flat">🟦 Topo Plano (End Mill)</option>
+                <option value="ball">🟣 Esférica (Ball Nose)</option>
+                <option value="vbit">🔺 Cónica / V-Bit (60°/90°)</option>
+                <option value="surfacing">🟫 Aplanar Mesa (Flycutter)</option>
               </select>
             </div>
             <div class="input-field">
-              <label id="lbl-spindle-speed" for="param-spindle-speed">Velocidade (RPM)</label>
-              <input type="number" id="param-spindle-speed" value="12000" step="500" min="0" max="60000">
+              <label id="lbl-spindle-speed" for="param-spindle-speed">Rotação Router (RPM)</label>
+              <input type="number" id="param-spindle-speed" value="18000" step="1000" min="6000" max="30000">
             </div>
           </div>
           <div class="input-grid" style="margin-top: 0.4rem;">
             <div class="input-field">
-              <label for="param-tool-dia">Diâmetro Fresa/Lâmina</label>
+              <label for="param-tool-dia">Diâmetro de Corte (mm)</label>
               <input type="number" id="param-tool-dia" value="3.175" step="0.001" min="0.1">
             </div>
             <div class="input-field">
-              <label for="param-safe-z">Z Segurança</label>
+              <label for="param-safe-z">Z Segurança (mm)</label>
               <input type="number" id="param-safe-z" value="5.0" step="0.5" min="1">
             </div>
           </div>
         </div>
 
         <div class="panel-section">
-          <h2>Maquinagem & Velocidades</h2>
+          <h2>Avanços & Passo Lateral</h2>
           <div class="input-grid">
             <div class="input-field">
-              <label for="param-feed-xy">Avanço XY (mm/min)</label>
-              <input type="number" id="param-feed-xy" value="1200" step="50" min="50">
+              <label for="param-feed-xy">Avanço Corte XY (mm/min)</label>
+              <input type="number" id="param-feed-xy" value="1400" step="50" min="50">
             </div>
             <div class="input-field">
-              <label for="param-feed-z">Avanço Z (mm/min)</label>
+              <label for="param-feed-z">Avanço Mergulho Z (mm/min)</label>
               <input type="number" id="param-feed-z" value="400" step="50" min="50">
             </div>
+          </div>
+          <div class="input-field" style="margin-top: 0.4rem;">
+            <label for="param-stepover">Passo Lateral / Stepover (%)</label>
+            <input type="number" id="param-stepover" value="40" step="5" min="5" max="95">
           </div>
         </div>
 
@@ -186,14 +249,14 @@
               <input type="number" id="param-depth-total" value="-3.0" step="0.1" max="0">
             </div>
             <div class="input-field">
-              <label for="param-depth-pass">Passo por Descida</label>
+              <label for="param-depth-pass">Passo por Descida (Z)</label>
               <input type="number" id="param-depth-pass" value="1.0" step="0.1" min="0.1">
             </div>
           </div>
         </div>
 
         <div class="panel-section">
-          <h2>Estratégia de Percurso</h2>
+          <h2>Estratégia & Interpolação</h2>
           <div class="input-field">
             <label for="param-strategy">Alinhamento de Corte</label>
             <select id="param-strategy">
@@ -202,10 +265,15 @@
               <option value="outside" disabled>Exterior (Perfil / Profile) - Brevemente</option>
             </select>
           </div>
+          <div class="checkbox-field" style="margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+            <input type="checkbox" id="param-use-arcs" checked style="accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;">
+            <label for="param-use-arcs" style="font-size: 0.8rem; cursor: pointer; color: #cbd5e1;">Interpolação Circular Nativa (G2/G3 I,J)</label>
+          </div>
         </div>
 
         <div class="panel-actions">
           <button id="btn-generate" class="primary-btn">⚙️ Gerar Trajectória</button>
+          <button id="btn-open-sim3d" class="secondary-btn" title="Ver simulação do corte em 3D">👁️ Ver no Simulador 3D</button>
           <button id="btn-download" class="secondary-btn disabled" disabled>💾 Guardar G-code (.nc)</button>
         </div>
 
@@ -216,6 +284,22 @@
               📋 Copiar
             </button>
           </div>
+          
+          <!-- Cartão de Estatísticas e Diagnóstico CAM (Fase 1 - Parser Of4W) -->
+          <div id="gcode-stats-card" class="gcode-stats-card" style="display: none;">
+            <div class="stats-row">
+              <div class="stat-badge"><span class="stat-icon">⏱️</span> <strong>Tempo:</strong> <span id="stat-est-time">--</span></div>
+              <div class="stat-badge"><span class="stat-icon">📏</span> <strong>Z Corte:</strong> <span id="stat-z-range">--</span></div>
+            </div>
+            <div class="stats-row" style="margin-top: 0.35rem;">
+              <div class="stat-badge"><span class="stat-icon">📐</span> <strong>Dimensões:</strong> <span id="stat-bbox">--</span></div>
+              <div class="stat-badge"><span class="stat-icon">🛣️</span> <strong>Distância:</strong> <span id="stat-distance">--</span></div>
+            </div>
+            <div id="gcode-safety-alert" class="safety-badge safe" style="margin-top: 0.45rem;">
+              <span id="gcode-safety-icon">✅</span> <span id="gcode-safety-msg">Percurso validado dentro dos limites da mesa.</span>
+            </div>
+          </div>
+
           <textarea id="gcode-output" readonly placeholder="O código G-code gerado aparecerá aqui..."></textarea>
         </div>
       </aside>
@@ -223,11 +307,11 @@
     </main>
   </div>
 
-  <!-- Modal de Gestão de Biblioteca de Ferramentas -->
+  <!-- Modal de Gestão de Biblioteca de Ferramentas (100% Fresas CNC Router) -->
   <div id="tool-manager-modal" class="modal" style="display: none;">
     <div class="modal-content tool-manager-content">
       <div class="modal-header">
-        <h2>🛠️ Gestor de Biblioteca de Ferramentas</h2>
+        <h2>🛠️ Gestor de Fresas para CNC Router</h2>
         <button id="btn-close-tool-manager" class="close-btn">&times;</button>
       </div>
       <div class="modal-body">
@@ -236,14 +320,15 @@
           <table class="tool-manager-table">
             <thead>
               <tr>
-                <th>Nome</th>
-                <th>Módulo</th>
-                <th>Diâmetro (mm)</th>
-                <th>Z Seg. (mm)</th>
+                <th>Nome da Fresa</th>
+                <th>Tipo</th>
+                <th>Diâmetro</th>
+                <th>Z Seg.</th>
                 <th>Avanço XY</th>
                 <th>Avanço Z</th>
                 <th>Passo Z</th>
-                <th>Velocidade</th>
+                <th>Stepover</th>
+                <th>RPM</th>
                 <th>Acções</th>
               </tr>
             </thead>
@@ -255,19 +340,20 @@
         
         <!-- Formulário para Criar/Editar Ferramenta -->
         <div class="tool-form-container">
-          <h3>➕ Adicionar Nova Ferramenta</h3>
+          <h3>➕ Adicionar / Editar Fresa de Router</h3>
           <form id="tool-manager-form">
             <div class="input-grid">
               <div class="input-field">
-                <label for="mngr-tool-name">Nome da Ferramenta</label>
-                <input type="text" id="mngr-tool-name" placeholder="Ex: Fresa de Topo 4mm" required>
+                <label for="mngr-tool-name">Nome da Fresa</label>
+                <input type="text" id="mngr-tool-name" placeholder="Ex: Fresa Topo Plano 4mm" required>
               </div>
               <div class="input-field">
-                <label for="mngr-tool-module">Módulo</label>
-                <select id="mngr-tool-module">
-                  <option value="spindle">Fuso (Spindle)</option>
-                  <option value="eot">Faca Oscilante (EOT)</option>
-                  <option value="dragtool">Lâmina de Arrasto (Drag)</option>
+                <label for="mngr-tool-type">Tipo de Fresa</label>
+                <select id="mngr-tool-type">
+                  <option value="flat">🟦 Topo Plano (End Mill)</option>
+                  <option value="ball">🟣 Esférica (Ball Nose)</option>
+                  <option value="vbit">🔺 Cónica / V-Bit (60°/90°)</option>
+                  <option value="surfacing">🟫 Aplanar Mesa (Flycutter)</option>
                 </select>
               </div>
             </div>
@@ -281,26 +367,30 @@
                 <input type="number" id="mngr-safe-z" value="5.0" step="0.5" min="1" required>
               </div>
               <div class="input-field">
-                <label for="mngr-spindle-speed">Velocidade/RPM</label>
-                <input type="number" id="mngr-spindle-speed" value="12000" step="500" min="0">
+                <label for="mngr-spindle-speed">Rotação (RPM)</label>
+                <input type="number" id="mngr-spindle-speed" value="18000" step="1000" min="6000" max="30000">
               </div>
             </div>
             <div class="input-grid" style="margin-top: 0.5rem;">
               <div class="input-field">
                 <label for="mngr-feed-xy">Avanço XY (mm/min)</label>
-                <input type="number" id="mngr-feed-xy" value="1200" step="50" min="50" required>
+                <input type="number" id="mngr-feed-xy" value="1400" step="50" min="50" required>
               </div>
               <div class="input-field">
                 <label for="mngr-feed-z">Avanço Z (mm/min)</label>
                 <input type="number" id="mngr-feed-z" value="400" step="50" min="50" required>
               </div>
               <div class="input-field">
-                <label for="mngr-depth-pass">Passo por Descida (mm)</label>
+                <label for="mngr-depth-pass">Passo Z (mm)</label>
                 <input type="number" id="mngr-depth-pass" value="1.0" step="0.1" min="0.1" required>
+              </div>
+              <div class="input-field">
+                <label for="mngr-stepover">Stepover (%)</label>
+                <input type="number" id="mngr-stepover" value="40" step="5" min="5" max="95" required>
               </div>
             </div>
             <div class="form-actions" style="margin-top: 0.8rem; display: flex; gap: 0.5rem;">
-              <button type="submit" id="btn-mngr-add-tool" class="primary-btn">💾 Salvar Ferramenta</button>
+              <button type="submit" id="btn-mngr-add-tool" class="primary-btn">💾 Guardar Fresa</button>
               <button type="button" id="btn-mngr-clear-form" class="secondary-btn">Limpar Campos</button>
             </div>
           </form>
@@ -308,8 +398,8 @@
       </div>
       <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid rgba(255,255,255,0.08);">
         <div>
-          <button id="btn-export-tools" class="secondary-btn" style="font-size: 0.8rem;">📤 Exportar Biblioteca (JSON)</button>
-          <button id="btn-import-tools" class="secondary-btn" style="font-size: 0.8rem; margin-left: 0.4rem;">📥 Importar Biblioteca</button>
+          <button id="btn-export-tools" class="secondary-btn" style="font-size: 0.8rem;">📤 Exportar Fresas (JSON)</button>
+          <button id="btn-import-tools" class="secondary-btn" style="font-size: 0.8rem; margin-left: 0.4rem;">📥 Importar Fresas</button>
           <input type="file" id="file-import-tools" style="display: none;" accept=".json">
         </div>
         <button id="btn-close-tool-manager-footer" class="secondary-btn">Fechar</button>

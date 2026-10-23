@@ -4,7 +4,7 @@
 - **Nome do Projecto:** Gcoded
 - **Objectivo:** Criar um gerador de percursos de corte (CAM/toolpath generator) interativo para máquinas CNC, a correr no browser de forma 100% local e offline-first. O utilizador poderá criar ou importar desenhos, configurar parâmetros da fresadora, gerar percursos e exportar o G-code. Todos os dados são guardados localmente no browser (`localStorage`) e através de exportação de ficheiros JSON.
 - **Data de Início:** 2026-08-21
-- **Versão Actual:** v0.4.3
+- **Versão Actual:** v0.5.0
 - **Nível de Risco:** 1 (Baixo - protótipo rápido, sem base de dados remota)
 - **Ambiente de Deploy:** Vercel (servido como site estático)
 
@@ -12,7 +12,7 @@
 
 ## 🛠️ Stack Tecnológica & Justificação
 - **Frontend:** HTML5, Vanilla CSS e Vanilla JavaScript.
-  - *Justificação:* Totalmente estático e offline-first. As bibliotecas gráficas (como Fabric.js para desenho e manipulação de vetores, e Transformers.js para inferência neural de modelos de profundidade 3D) são carregadas via CDN.
+  - *Justificação:* Totalmente estático e offline-first. Bibliotecas externas são carregadas via CDN: Fabric.js (desenho vetorial 2D), Three.js + OrbitControls (simulação 3D WebGL de maquinação CNC) e Transformers.js (inferência neural local de profundidade).
 - **Base de Dados / Persistência:** `IndexedDB` para dados volumosos (mapas de profundidade e imagens de relevo 3D), `localStorage` para definições e geometrias vetoriais ligeiras, e exportação manual para ficheiro JSON.
   - *Justificação:* O `localStorage` tem limite estrito de ~5MB, estourando rapidamente ao serializar Float32Array de relevos 3D de alta resolução. O `IndexedDB` suporta armazenamento assíncrono de centenas de megabytes no browser local sem falhas.
 - **Servidor Local de Testes:** Servidor HTTP leve externo (ex: `npx serve`, `python -m http.server` ou extensão Live Server).
@@ -60,6 +60,13 @@
 - **[2026-10-23] | DECISÃO-013 | Persistência Fiável de Relevo 3D e Mapas de Profundidade via IndexedDB**
   - **Contexto:** Relevos 3D continham mapas de profundidade `Float32Array` volumosos. Guardá-los no `localStorage` gerava `QuotaExceededError` ou perda silenciosa dos dados de relevo ao fechar ou recarregar o browser, impossibilitando a regeneração posterior de G-code 3D.
   - **Decisão:** Implementação de base de dados IndexedDB local (`gcoded_db`, store `reliefs`). O `saveAppState` isola metadados ligeiros no `localStorage` e persiste matrizes de profundidade e imagens no `IndexedDB`. O `loadAppState` reconstrói o objecto no Fabric.js restaurando `depthMap`, `reliefWidth` e `reliefHeight`, garantindo integridade na geração de G-code após reload (F5).
+- **[2026-10-23] | DECISÃO-014 | Simulador 3D WebGL, Arcos G2/G3 Nativos e Reformulação Exclusiva para CNC Routers**
+  - **Contexto:** Inspirado na engenharia reversa do NCViewer, o software necessitava de feedback visual tridimensional em tempo real para inspeção prévia de código G-code, eliminação de facetação poligonal em círculos, e remoção de módulos legados irrelevantes (lâminas de arrasto e facas oscilantes EOT), focando a aplicação a 100% em fresagem e CNC Routers.
+  - **Decisão:** 
+    1. **Fase 1 (Parser & Verificador Preventivo):** Implementado motor modal de análise G-code para extrair Bounding Box X/Y/Z, cálculo rigoroso de tempo estimado de maquinação (considerando avanços de corte e avanço rápido de 3000 mm/min) e alerta de segurança proativo em caso de invasão de limites da mesa ou mergulho inferior à espessura do material.
+    2. **Fase 2 (Arcos Nativos G2/G3):** Otimizador CAM com suporte a interpolação circular nativa usando vetores relativos I e J no plano XY (G17), gerando círculos e curvas suaves de elevada precisão com código G-code limpo e compacto.
+    3. **Fase 3 (Simulador 3D WebGL com Three.js):** Renderização tridimensional interativa com mesa de trabalho em grelha cinzenta e origens X/Y/Z, bloco de material translúcido iluminado, linhas tridimensionais diferenciadas por cor (vermelho para G0 rápido, azul para G1/G2/G3 de corte), ferramenta/fresa animada em 3D, painel DRO digital (X, Y, Z, F e Linha) e barra de controlo de reprodução (Play, Pausa, Reset, Timeline e velocidades 0.5x até 10x).
+    4. **Reformulação Exclusiva de Ferramentas (CNC Routers):** Barra lateral e biblioteca modal reorganizadas para operar unicamente com fresas de router (End Mill, Ball Nose, V-Bit, Fresa de Aplanar), parâmetros de rotação Spindle (RPM) e passo lateral (*Stepover* %), com eliminação integral de módulos EOT/lâminas de arrasto.
 
 ---
 
@@ -79,5 +86,10 @@
 - [x] Corrigir geometria de linhas diagonais, retângulos sob zoom/pan e orientação Y de relevo 3D
 - [x] Implementar retracção de segurança entre subpaths e reposicionamento Z em contornos abertos
 - [x] Persistência fiável de dados e mapas de profundidade de relevo 3D via IndexedDB
+- [x] Parser e Validador Preventivo de G-Code com cálculo de tempos e Dry-Run Verifier (Fase 1)
+- [x] Motor de Interpolação de Arcos Nativos G2/G3 com vetores relativos I e J (Fase 2)
+- [x] Simulador 3D WebGL integrado em Three.js com painel DRO e controlos de reprodução (Fase 3)
+- [x] Reformulação da barra lateral e biblioteca exclusivamente para Fresas e Routers CNC
 - [ ] Desenvolver estratégia de corte "Exterior (Profile)" com compensação de raio da fresa
 - [ ] Desenvolver estratégia de corte "Interior (Pocket)" para preenchimento de caixas
+

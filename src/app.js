@@ -34,24 +34,46 @@ let inputTableX, inputTableY, inputMaterialZ, selectOriginType, inputWcsX, input
 let contextMenu, ctxSendToOrigin, ctxDelete, ctxGroup, ctxUngroup;
 let rightClickedObject = null;
 
-// Biblioteca de Ferramentas
+// Biblioteca de Ferramentas (100% Fresas para CNC Router)
 let selectToolLibrary, btnOpenToolManager;
 let toolsLibrary = [];
 const DEFAULT_TOOLS = [
-  { id: 'flat-3175', name: 'Fresa Topo Plano 3.175mm', toolDia: 3.175, safeZ: 5.0, feedXY: 1200, feedZ: 400, depthPass: 1.0, moduleType: 'spindle', spindleSpeed: 12000 },
-  { id: 'flat-6000', name: 'Fresa Topo Plano 6.000mm', toolDia: 6.0, safeZ: 5.0, feedXY: 1800, feedZ: 600, depthPass: 2.0, moduleType: 'spindle', spindleSpeed: 12000 },
-  { id: 'flat-2000', name: 'Fresa Topo Plano 2.000mm', toolDia: 2.0, safeZ: 5.0, feedXY: 800, feedZ: 300, depthPass: 0.8, moduleType: 'spindle', spindleSpeed: 15000 },
-  { id: 'eot-foam-6000', name: 'Lâmina Oscilante EOT 6.0mm', toolDia: 6.0, safeZ: 5.0, feedXY: 1500, feedZ: 800, depthPass: 3.0, moduleType: 'eot', spindleSpeed: 6000 },
-  { id: 'drag-knife-05', name: 'Lâmina Arrasto DragTool 0.5mm', toolDia: 0.5, safeZ: 3.0, feedXY: 1000, feedZ: 200, depthPass: 0.2, moduleType: 'dragtool', spindleSpeed: 0 }
+  { id: 'flat-6000', name: 'Fresa Topo Plano 6.0mm (Corte & Desbaste)', toolType: 'flat', toolDia: 6.0, safeZ: 5.0, feedXY: 1800, feedZ: 500, depthPass: 2.0, stepover: 40, spindleSpeed: 18000 },
+  { id: 'flat-3175', name: 'Fresa Topo Plano 3.175mm (1/8" Contorno)', toolType: 'flat', toolDia: 3.175, safeZ: 5.0, feedXY: 1400, feedZ: 400, depthPass: 1.2, stepover: 40, spindleSpeed: 18000 },
+  { id: 'flat-2000', name: 'Fresa Topo Plano 2.0mm (Detalhes & Canais)', toolType: 'flat', toolDia: 2.0, safeZ: 4.0, feedXY: 900, feedZ: 300, depthPass: 0.8, stepover: 35, spindleSpeed: 20000 },
+  { id: 'ball-3175', name: 'Fresa Esférica 3.175mm (Relevos 3D & Acabamento)', toolType: 'ball', toolDia: 3.175, safeZ: 5.0, feedXY: 1600, feedZ: 500, depthPass: 1.5, stepover: 15, spindleSpeed: 20000 },
+  { id: 'ball-1500', name: 'Fresa Esférica 1.5mm (Relevo Alta Definição)', toolType: 'ball', toolDia: 1.5, safeZ: 4.0, feedXY: 1000, feedZ: 300, depthPass: 0.8, stepover: 10, spindleSpeed: 24000 },
+  { id: 'vbit-60-6', name: 'Fresa V-Bit 60° 6mm (Gravação & Chanfro)', toolType: 'vbit', toolDia: 6.0, safeZ: 5.0, feedXY: 1200, feedZ: 350, depthPass: 1.5, stepover: 30, spindleSpeed: 18000 },
+  { id: 'vbit-90-12', name: 'Fresa V-Bit 90° 12mm (Entalhes V-Carve)', toolType: 'vbit', toolDia: 12.0, safeZ: 5.0, feedXY: 1400, feedZ: 400, depthPass: 2.0, stepover: 30, spindleSpeed: 16000 },
+  { id: 'surf-25000', name: 'Fresa de Aplanar 25mm (Faceamento da Mesa)', toolType: 'surfacing', toolDia: 25.0, safeZ: 5.0, feedXY: 2500, feedZ: 400, depthPass: 0.5, stepover: 60, spindleSpeed: 14000 }
 ];
 
-// Módulos de Trabalho
-let selectToolModule, inputSpindleSpeed, lblSpindleSpeed;
+// Parâmetros de Fresa e CNC Router
+let paramToolType, inputSpindleSpeed, lblSpindleSpeed, inputStepover, paramUseArcs;
 
 // Elementos do Gestor de Ferramentas (Modal)
 let toolManagerModal, btnCloseToolManager, btnCloseToolManagerFooter, toolManagerTbody, toolManagerForm, btnMngrClearForm;
-let mngrToolName, mngrToolModule, mngrToolDia, mngrSafeZ, mngrSpindleSpeed, mngrFeedXY, mngrFeedZ, mngrDepthPass;
+let mngrToolName, mngrToolType, mngrToolDia, mngrSafeZ, mngrSpindleSpeed, mngrFeedXY, mngrFeedZ, mngrDepthPass, mngrStepover;
 let btnExportTools, btnImportTools, fileImportTools;
+
+// Elementos da Vista e Simulador 3D WebGL (Three.js)
+let tabView2d, tabView3d, sim3dContainer, canvasContainer, btnOpenSim3d;
+let btnSimPlay, btnSimReset, simSpeedSelect, simTimeline, simProgressText;
+let droX, droY, droZ, droF, droLine;
+let btnCamIso, btnCamTop, btnCamFront;
+let simStatusBadge, simStatusText;
+let gcodeStatsCard, statEstTime, statZRange, statBBox, statDistance, gcodeSafetyAlert, gcodeSafetyIcon, gcodeSafetyMsg;
+
+// Estado do Simulador 3D WebGL (Three.js)
+let threeScene = null, threeCamera = null, threeRenderer = null, threeControls = null;
+let toolpathRapidMesh = null, toolpathCutMesh = null, threeCutterTool = null, threeMaterialMesh = null, threeTableMesh = null;
+let simParsedData = null;
+let simSegments = [];
+let simAnimId = null;
+let simIsPlaying = false;
+let simCurrentIndex = 0;
+let simSpeedMultiplier = 5;
+let currentViewMode = '2d'; // '2d' | '3d'
 
 // Elementos do Motor de Corte 3D por Imagem (AI Deep Map & Relief Carving)
 let btnImport3D, fileImport3D, reliefModal, btnCloseRelief, btnCloseReliefFooter, btnGenerateRelief;
@@ -122,7 +144,7 @@ function cacheUIElements() {
   ctxGroup = document.getElementById('ctx-group');
   ctxUngroup = document.getElementById('ctx-ungroup');
 
-  // inputs
+  // Inputs e Parâmetros da Fresa (CNC Router)
   inputToolDia = document.getElementById('param-tool-dia');
   inputSafeZ = document.getElementById('param-safe-z');
   inputFeedXY = document.getElementById('param-feed-xy');
@@ -130,6 +152,11 @@ function cacheUIElements() {
   inputDepthTotal = document.getElementById('param-depth-total');
   inputDepthPass = document.getElementById('param-depth-pass');
   selectStrategy = document.getElementById('param-strategy');
+  paramToolType = document.getElementById('param-tool-type');
+  inputStepover = document.getElementById('param-stepover');
+  paramUseArcs = document.getElementById('param-use-arcs');
+  inputSpindleSpeed = document.getElementById('param-spindle-speed');
+  lblSpindleSpeed = document.getElementById('lbl-spindle-speed');
 
   inputTableX = document.getElementById('param-table-x');
   inputTableY = document.getElementById('param-table-y');
@@ -142,11 +169,6 @@ function cacheUIElements() {
   selectToolLibrary = document.getElementById('select-tool-library');
   btnOpenToolManager = document.getElementById('btn-open-tool-manager');
 
-  // Mapear elementos dos módulos de trabalho
-  selectToolModule = document.getElementById('param-tool-module');
-  inputSpindleSpeed = document.getElementById('param-spindle-speed');
-  lblSpindleSpeed = document.getElementById('lbl-spindle-speed');
-
   // Mapear elementos do gestor de ferramentas (Modal)
   toolManagerModal = document.getElementById('tool-manager-modal');
   btnCloseToolManager = document.getElementById('btn-close-tool-manager');
@@ -156,17 +178,54 @@ function cacheUIElements() {
   btnMngrClearForm = document.getElementById('btn-mngr-clear-form');
   
   mngrToolName = document.getElementById('mngr-tool-name');
-  mngrToolModule = document.getElementById('mngr-tool-module');
+  mngrToolType = document.getElementById('mngr-tool-type');
   mngrToolDia = document.getElementById('mngr-tool-dia');
   mngrSafeZ = document.getElementById('mngr-safe-z');
   mngrSpindleSpeed = document.getElementById('mngr-spindle-speed');
   mngrFeedXY = document.getElementById('mngr-feed-xy');
   mngrFeedZ = document.getElementById('mngr-feed-z');
   mngrDepthPass = document.getElementById('mngr-depth-pass');
+  mngrStepover = document.getElementById('mngr-stepover');
   
   btnExportTools = document.getElementById('btn-export-tools');
   btnImportTools = document.getElementById('btn-import-tools');
   fileImportTools = document.getElementById('file-import-tools');
+
+  // Mapear elementos de selecção de Vista e Simulador 3D WebGL
+  tabView2d = document.getElementById('tab-view-2d');
+  tabView3d = document.getElementById('tab-view-3d');
+  sim3dContainer = document.getElementById('sim3d-container');
+  canvasContainer = document.getElementById('canvas-container');
+  btnOpenSim3d = document.getElementById('btn-open-sim3d');
+
+  btnSimPlay = document.getElementById('btn-sim-play');
+  btnSimReset = document.getElementById('btn-sim-reset');
+  simSpeedSelect = document.getElementById('sim-speed-select');
+  simTimeline = document.getElementById('sim-timeline');
+  simProgressText = document.getElementById('sim-progress-text');
+
+  droX = document.getElementById('dro-x');
+  droY = document.getElementById('dro-y');
+  droZ = document.getElementById('dro-z');
+  droF = document.getElementById('dro-f');
+  droLine = document.getElementById('dro-line');
+
+  btnCamIso = document.getElementById('btn-cam-iso');
+  btnCamTop = document.getElementById('btn-cam-top');
+  btnCamFront = document.getElementById('btn-cam-front');
+
+  simStatusBadge = document.getElementById('sim-status-badge');
+  simStatusText = document.getElementById('sim-status-text');
+
+  // Mapear elementos do cartão de estatísticas de G-code
+  gcodeStatsCard = document.getElementById('gcode-stats-card');
+  statEstTime = document.getElementById('stat-est-time');
+  statZRange = document.getElementById('stat-z-range');
+  statBBox = document.getElementById('stat-bbox');
+  statDistance = document.getElementById('stat-distance');
+  gcodeSafetyAlert = document.getElementById('gcode-safety-alert');
+  gcodeSafetyIcon = document.getElementById('gcode-safety-icon');
+  gcodeSafetyMsg = document.getElementById('gcode-safety-msg');
 
   // Mapear elementos do modal de Corte 3D por Imagem
   btnImport3D = document.getElementById('btn-import-3d');
@@ -269,7 +328,7 @@ function hideToolManagerModal() {
 }
 
 /**
- * Reconstrói a tabela de ferramentas dentro do Gestor
+ * Reconstrói a tabela de ferramentas dentro do Gestor (100% Fresas CNC Router)
  */
 function renderToolManagerTable() {
   if (!toolManagerTbody) return;
@@ -283,13 +342,14 @@ function renderToolManagerTable() {
     tdName.innerText = tool.name;
     tr.appendChild(tdName);
     
-    // Módulo
-    const tdModule = document.createElement('td');
-    let modLabel = "Fuso (Spindle)";
-    if (tool.moduleType === 'eot') modLabel = "Oscilante (EOT)";
-    if (tool.moduleType === 'dragtool') modLabel = "Arrasto (Drag)";
-    tdModule.innerText = modLabel;
-    tr.appendChild(tdModule);
+    // Tipo de Fresa
+    const tdType = document.createElement('td');
+    let typeLabel = "Topo Plano";
+    if (tool.toolType === 'ball') typeLabel = "Esférica (3D)";
+    else if (tool.toolType === 'vbit') typeLabel = "V-Bit (Gravação)";
+    else if (tool.toolType === 'surfacing') typeLabel = "Aplanar Mesa";
+    tdType.innerText = typeLabel;
+    tr.appendChild(tdType);
     
     // Diâmetro
     const tdDia = document.createElement('td');
@@ -315,10 +375,15 @@ function renderToolManagerTable() {
     const tdPassZ = document.createElement('td');
     tdPassZ.innerText = `${tool.depthPass} mm`;
     tr.appendChild(tdPassZ);
+
+    // Passo Lateral / Stepover
+    const tdStepover = document.createElement('td');
+    tdStepover.innerText = `${tool.stepover || 40}%`;
+    tr.appendChild(tdStepover);
     
-    // Velocidade
+    // Rotação Router
     const tdSpeed = document.createElement('td');
-    tdSpeed.innerText = tool.moduleType === 'dragtool' ? 'N/A' : `${tool.spindleSpeed} RPM/Hz`;
+    tdSpeed.innerText = `${tool.spindleSpeed || 18000} RPM`;
     tr.appendChild(tdSpeed);
     
     // Ações
@@ -356,8 +421,9 @@ function useToolFromManager(id) {
     inputFeedXY.value = tool.feedXY;
     inputFeedZ.value = tool.feedZ;
     inputDepthPass.value = tool.depthPass;
-    
-    updateModuleUI(tool.moduleType || 'spindle', tool.spindleSpeed);
+    if (paramToolType) paramToolType.value = tool.toolType || 'flat';
+    if (inputStepover) inputStepover.value = tool.stepover || 40;
+    if (inputSpindleSpeed) inputSpindleSpeed.value = tool.spindleSpeed || 18000;
     
     clearVisualToolpaths();
     saveAppState();
@@ -404,13 +470,14 @@ function addToolFromManager() {
   const newTool = {
     id: 'custom-' + Date.now(),
     name: name,
+    toolType: mngrToolType ? mngrToolType.value : 'flat',
     toolDia: parseFloat(mngrToolDia.value) || 3.175,
     safeZ: parseFloat(mngrSafeZ.value) || 5.0,
-    feedXY: parseInt(mngrFeedXY.value) || 1200,
+    feedXY: parseInt(mngrFeedXY.value) || 1400,
     feedZ: parseInt(mngrFeedZ.value) || 400,
     depthPass: parseFloat(mngrDepthPass.value) || 1.0,
-    moduleType: mngrToolModule.value,
-    spindleSpeed: mngrToolModule.value === 'dragtool' ? 0 : (parseInt(mngrSpindleSpeed.value) || 12000)
+    stepover: mngrStepover ? parseInt(mngrStepover.value) || 40 : 40,
+    spindleSpeed: parseInt(mngrSpindleSpeed.value) || 18000
   };
   
   toolsLibrary.push(newTool);
@@ -430,14 +497,15 @@ function addToolFromManager() {
 function clearToolManagerForm() {
   if (!toolManagerForm) return;
   mngrToolName.value = "";
-  mngrToolModule.value = "spindle";
+  if (mngrToolType) mngrToolType.value = "flat";
   mngrToolDia.value = 3.175;
   mngrSafeZ.value = 5.0;
-  mngrSpindleSpeed.value = 12000;
+  mngrSpindleSpeed.value = 18000;
   mngrSpindleSpeed.disabled = false;
-  mngrFeedXY.value = 1200;
+  mngrFeedXY.value = 1400;
   mngrFeedZ.value = 400;
   mngrDepthPass.value = 1.0;
+  if (mngrStepover) mngrStepover.value = 40;
 }
 
 /**
@@ -451,7 +519,7 @@ function exportToolsLibrary() {
     
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'gcoded_tool_library.json';
+    a.download = 'gcoded_router_tools.json';
     a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
@@ -510,25 +578,15 @@ function importToolsLibrary(e) {
 }
 
 /**
- * Actualiza a interface com base no Módulo de Trabalho seleccionado
+ * Actualiza a interface da barra lateral com os dados da fresa seleccionada
  */
-function updateModuleUI(moduleType, speed) {
-  if (!selectToolModule || !inputSpindleSpeed || !lblSpindleSpeed) return;
-  
-  selectToolModule.value = moduleType || 'spindle';
-  
-  if (moduleType === 'spindle') {
-    lblSpindleSpeed.innerText = 'Velocidade Spindle (RPM)';
-    inputSpindleSpeed.disabled = false;
-    inputSpindleSpeed.value = speed !== undefined ? speed : 12000;
-  } else if (moduleType === 'eot') {
-    lblSpindleSpeed.innerText = 'Freq. Oscilação (Hz/RPM)';
-    inputSpindleSpeed.disabled = false;
-    inputSpindleSpeed.value = speed !== undefined ? speed : 6000;
-  } else if (moduleType === 'dragtool') {
-    lblSpindleSpeed.innerText = 'Lâmina Estática (Desactivada)';
-    inputSpindleSpeed.disabled = true;
-    inputSpindleSpeed.value = 0;
+function updateRouterToolUI(toolType, speed, stepover) {
+  if (paramToolType && toolType) paramToolType.value = toolType;
+  if (inputSpindleSpeed) {
+    inputSpindleSpeed.value = speed !== undefined ? speed : 18000;
+  }
+  if (inputStepover) {
+    inputStepover.value = stepover !== undefined ? stepover : 40;
   }
 }
 
@@ -1652,8 +1710,8 @@ function setupEventListeners() {
   });
   canvas.on('mouse:wheel', hideContextMenu);
   
-  // Guardar estado quando os parâmetros mudam (inclui espessura do material)
-  const params = [inputToolDia, inputSafeZ, inputFeedXY, inputFeedZ, inputDepthTotal, inputDepthPass, selectStrategy, inputMaterialZ, selectToolModule, inputSpindleSpeed];
+  // Guardar estado quando os parâmetros de corte mudam
+  const params = [inputToolDia, inputSafeZ, inputFeedXY, inputFeedZ, inputDepthTotal, inputDepthPass, selectStrategy, inputMaterialZ, paramToolType, inputStepover, paramUseArcs, inputSpindleSpeed];
   params.forEach(input => {
     if (input) {
       input.addEventListener('change', () => {
@@ -1662,15 +1720,6 @@ function setupEventListeners() {
       });
     }
   });
-
-  // Ouvir alteração directa do Módulo de Trabalho
-  if (selectToolModule) {
-    selectToolModule.addEventListener('change', () => {
-      updateModuleUI(selectToolModule.value);
-      clearVisualToolpaths();
-      saveAppState();
-    });
-  }
 
   // Biblioteca de Ferramentas - Seleccionar Ferramenta
   selectToolLibrary.addEventListener('change', () => {
@@ -1682,13 +1731,47 @@ function setupEventListeners() {
       inputFeedXY.value = tool.feedXY;
       inputFeedZ.value = tool.feedZ;
       inputDepthPass.value = tool.depthPass;
-      
-      updateModuleUI(tool.moduleType || 'spindle', tool.spindleSpeed);
+      if (paramToolType) paramToolType.value = tool.toolType || 'flat';
+      if (inputStepover) inputStepover.value = tool.stepover || 40;
+      if (inputSpindleSpeed) inputSpindleSpeed.value = tool.spindleSpeed || 18000;
       
       clearVisualToolpaths();
       saveAppState();
     }
   });
+
+  // Alternância de Vistas: 2D vs 3D
+  if (tabView2d && tabView3d) {
+    tabView2d.addEventListener('click', () => switchViewMode('2d'));
+    tabView3d.addEventListener('click', () => switchViewMode('3d'));
+  }
+  if (btnOpenSim3d) {
+    btnOpenSim3d.addEventListener('click', () => {
+      switchViewMode('3d');
+      if (simParsedData && simParsedData.segments.length > 0) {
+        startSimulationPlayback();
+      }
+    });
+  }
+
+  // Controlos do Simulador 3D
+  if (btnSimPlay) btnSimPlay.addEventListener('click', toggleSimulationPlay);
+  if (btnSimReset) btnSimReset.addEventListener('click', resetSimulation);
+  if (simSpeedSelect) {
+    simSpeedSelect.addEventListener('change', () => {
+      simSpeedMultiplier = parseFloat(simSpeedSelect.value) || 5;
+    });
+  }
+  if (simTimeline) {
+    simTimeline.addEventListener('input', () => {
+      seekSimulation(parseFloat(simTimeline.value));
+    });
+  }
+
+  // Atalhos de Câmara 3D
+  if (btnCamIso) btnCamIso.addEventListener('click', () => setThreeCameraPreset('iso'));
+  if (btnCamTop) btnCamTop.addEventListener('click', () => setThreeCameraPreset('top'));
+  if (btnCamFront) btnCamFront.addEventListener('click', () => setThreeCameraPreset('front'));
 
   // Biblioteca de Ferramentas - Abrir Janela Gestora
   btnOpenToolManager.addEventListener('click', showToolManagerModal);
@@ -1705,21 +1788,6 @@ function setupEventListeners() {
 
   // Limpar formulário de cadastro do gestor
   btnMngrClearForm.addEventListener('click', clearToolManagerForm);
-
-  // Comportamento dinâmico no select de módulo do formulário do gestor
-  mngrToolModule.addEventListener('change', () => {
-    const mod = mngrToolModule.value;
-    if (mod === 'spindle') {
-      mngrSpindleSpeed.disabled = false;
-      mngrSpindleSpeed.value = 12000;
-    } else if (mod === 'eot') {
-      mngrSpindleSpeed.disabled = false;
-      mngrSpindleSpeed.value = 6000;
-    } else if (mod === 'dragtool') {
-      mngrSpindleSpeed.disabled = true;
-      mngrSpindleSpeed.value = 0;
-    }
-  });
 
   // Exportar / Importar Ferramentas
   btnExportTools.addEventListener('click', exportToolsLibrary);
@@ -2461,18 +2529,13 @@ function generateGCode() {
 
     gcodeOutputText.style.color = "var(--success)";
 
-    // 3. Montar Cabeçalho do G-code Limpo
+    // 3. Montar Cabeçalho do G-code Limpo (Padrão CNC Router)
     let gcode = [];
     gcode.push(`G21`);
     gcode.push(`G90`);
     gcode.push(`G17`);
-    if (toolModule === 'spindle') {
-      gcode.push(`M3 S${spindleSpeed.toFixed(0)}`);
-      gcode.push(`G4 P1.5`);
-    } else if (toolModule === 'eot') {
-      gcode.push(`M3 S${spindleSpeed.toFixed(0)}`);
-      gcode.push(`G4 P1.0`);
-    }
+    gcode.push(`M3 S${spindleSpeed.toFixed(0)}`);
+    gcode.push(`G4 P1.5`);
     gcode.push(`G0 Z${safeZ.toFixed(3)}`);
 
     // WCS Offsets
@@ -2610,11 +2673,13 @@ function generateGCode() {
         ].map(p => fabric.util.transformPoint(new fabric.Point(p.x, p.y), m));
         subpaths.push(pts);
       }
-      // --- CASO 2: CÍRCULO ---
+      // --- CASO 2: CÍRCULO (FASE 2: ARCOS NATIVOS G2/G3 COM VETORES I, J) ---
       else if (obj.type === 'circle') {
         const center = obj.getCenterPoint();
         const radius = obj.radius * (obj.scaleX || 1);
-        const steps = 64; // Aproximação por polígono de 64 lados
+        const useArcs = paramUseArcs ? paramUseArcs.checked : true;
+
+        const steps = 64;
         const pts = [];
         for (let i = 0; i <= steps; i++) {
           const theta = (i / steps) * 2 * Math.PI;
@@ -2622,7 +2687,17 @@ function generateGCode() {
           const py = center.y + radius * Math.sin(theta);
           pts.push({ x: px, y: py });
         }
-        subpaths.push(pts);
+
+        if (useArcs) {
+          subpaths.push({
+            isArcCircle: true,
+            center,
+            radius,
+            visualPoints: pts
+          });
+        } else {
+          subpaths.push(pts);
+        }
       }
       // --- CASO 3: LINHA ---
       else if (obj.type === 'line') {
@@ -2699,7 +2774,52 @@ function generateGCode() {
       }
 
       // Processar cada subpath individualmente com retracção segura a Z seguro
-      subpaths.forEach(points => {
+      subpaths.forEach(subItem => {
+        // Se for arco nativo circular G2 (Interpolação de Alta Suavidade)
+        if (subItem && subItem.isArcCircle) {
+          const { center, radius, visualPoints } = subItem;
+          toolpathsToVisualise.push(visualPoints);
+
+          const wcsX = parseCAMParam(inputWcsX, 250);
+          const wcsY = parseCAMParam(inputWcsY, 250);
+
+          const cxMM = (center.x / ESCALA_MM_PX) - wcsX;
+          const cyMM = ((canvas.height - center.y) / ESCALA_MM_PX) - wcsY;
+          const rMM = radius / ESCALA_MM_PX;
+
+          const startX = cxMM - rMM;
+          const startY = cyMM;
+
+          // Calcular as passagens verticais de descida Z
+          const zPasses = [];
+          let currentZ = -depthPass;
+          while (currentZ > depthTotal) {
+            zPasses.push(currentZ);
+            currentZ -= depthPass;
+          }
+          zPasses.push(depthTotal);
+
+          // Deslocação rápida inicial para o início do arco à altura segura
+          gcode.push(`G0 Z${safeZ.toFixed(3)}`);
+          gcode.push(`G0 X${startX.toFixed(3)} Y${startY.toFixed(3)}`);
+
+          // Executar corte circular com comandos G2 em 2 semi-arcos perfeitos de 180°
+          zPasses.forEach((zVal) => {
+            // Mergulho vertical à taxa de avanço Z
+            gcode.push(`G1 Z${zVal.toFixed(3)} F${feedZ.toFixed(0)}`);
+
+            // Arco superior 180° (sentido horário): de (cx - r, cy) até (cx + r, cy), centro relativo em I = r, J = 0
+            gcode.push(`G2 X${(cxMM + rMM).toFixed(3)} Y${cyMM.toFixed(3)} I${rMM.toFixed(3)} J0.000 F${feedXY.toFixed(0)}`);
+            // Arco inferior 180° (sentido horário): de (cx + r, cy) até (cx - r, cy), centro relativo em I = -r, J = 0
+            gcode.push(`G2 X${(cxMM - rMM).toFixed(3)} Y${cyMM.toFixed(3)} I${(-rMM).toFixed(3)} J0.000 F${feedXY.toFixed(0)}`);
+          });
+
+          // Retracção de segurança
+          gcode.push(`G0 Z${safeZ.toFixed(3)}`);
+          return;
+        }
+
+        const points = subItem;
         if (!points || points.length < 2) return;
 
         // Converter pontos para mm em relação à Origem do Trabalho (WCS Zero na mesa)
@@ -2756,14 +2876,9 @@ function generateGCode() {
       });
     });
 
-    // 5. Rodapé Final do G-code
+    // 5. Rodapé Final do G-code (Paragem do Router CNC)
     gcode.push(`G0 Z${safeZ.toFixed(3)}`);
-    
-    // Paragem de rotação/oscilação conforme o Módulo
-    if (toolModule === 'spindle' || toolModule === 'eot') {
-      gcode.push(`M5`);
-    }
-    
+    gcode.push(`M5`);
     gcode.push(`G0 X0 Y0`);
     gcode.push(`M30`);
     
@@ -2775,6 +2890,12 @@ function generateGCode() {
 
     lastGeneratedGCode = cleanGCode;
     gcodeOutputText.value = cleanGCode;
+
+    // FASE 1: Parser e Diagnóstico de Segurança CAM (Baseado no Of4W)
+    analyzeAndDisplayGCodeStats(cleanGCode);
+
+    // FASE 3: Carregar percurso no Simulador 3D WebGL (Three.js)
+    loadGCodeInto3DSimulator(cleanGCode);
 
     // 6. Activar botões
     btnDownload.classList.remove('disabled');
@@ -2811,9 +2932,705 @@ function drawVisualToolpaths(paths) {
   canvas.requestRenderAll();
 }
 
+/* ==========================================================================
+   FASE 1: PARSER DE G-CODE, ESTATÍSTICAS E VALIDAÇÃO CAM (ESTILO NCVIEWER Of4W)
+   ========================================================================== */
+
 /**
- * Descarrega o G-code gerado como ficheiro (.nc)
+ * Parser de G-code robusto que decompõe blocos CNC, calcula bounding box, distâncias e tempos
  */
+function parseGCode(gcodeText) {
+  const tokenRegex = /(G|M|X|Y|Z|A|B|C|I|J|K|R|S|T|F)(-?\d*\.?\d+\.?)/gi;
+  const commentRegex = /\((.*?)\)|;.*$/;
+
+  let motion = 0; // 0=Rapid, 1=Linear, 2=ArcCW, 3=ArcCCW
+  let distMode = 90; // 90=Absolute, 91=Incremental
+  let currentFeed = 1400;
+  let rapidFeed = 3500; // mm/min assumido para deslocações rápidas G0
+  let currentPos = { x: 0, y: 0, z: 0 };
+  let currentTool = 1;
+  let spindleSpeed = 18000;
+
+  const points = [];
+  const segments = []; // Trajectórias para o simulador 3D e cálculo de métricas
+  
+  let minX = Infinity, maxX = -Infinity;
+  let minY = Infinity, maxY = -Infinity;
+  let minZ = Infinity, maxZ = -Infinity;
+  let totalRapidDist = 0;
+  let totalFeedDist = 0;
+  let totalTimeMinutes = 0;
+
+  const lines = gcodeText.split('\n');
+
+  for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+    const rawLine = lines[lineIdx];
+    const cleanLine = rawLine.replace(commentRegex, '').trim();
+    if (!cleanLine) continue;
+
+    let targetPos = { ...currentPos };
+    let hasMove = false;
+    let arcI = 0, arcJ = 0, arcK = 0, arcR = null;
+
+    let match;
+    tokenRegex.lastIndex = 0;
+    while ((match = tokenRegex.exec(cleanLine)) !== null) {
+      const letter = match[1].toUpperCase();
+      const val = parseFloat(match[2]);
+
+      switch (letter) {
+        case 'G':
+          if (val === 0) motion = 0;
+          else if (val === 1) motion = 1;
+          else if (val === 2) motion = 2;
+          else if (val === 3) motion = 3;
+          else if (val === 90) distMode = 90;
+          else if (val === 91) distMode = 91;
+          break;
+        case 'X':
+          targetPos.x = distMode === 91 ? currentPos.x + val : val;
+          hasMove = true;
+          break;
+        case 'Y':
+          targetPos.y = distMode === 91 ? currentPos.y + val : val;
+          hasMove = true;
+          break;
+        case 'Z':
+          targetPos.z = distMode === 91 ? currentPos.z + val : val;
+          hasMove = true;
+          break;
+        case 'I':
+          arcI = val;
+          break;
+        case 'J':
+          arcJ = val;
+          break;
+        case 'K':
+          arcK = val;
+          break;
+        case 'R':
+          arcR = val;
+          break;
+        case 'F':
+          currentFeed = val;
+          break;
+        case 'S':
+          spindleSpeed = val;
+          break;
+        case 'T':
+          currentTool = val;
+          break;
+      }
+    }
+
+    if (hasMove) {
+      const dx = targetPos.x - currentPos.x;
+      const dy = targetPos.y - currentPos.y;
+      const dz = targetPos.z - currentPos.z;
+      const linearDist = Math.hypot(dx, dy, dz);
+
+      // Tratamento de Arcos G2 / G3 (Interpolação circular baseada na matemática do módulo zfJf)
+      if ((motion === 2 || motion === 3) && (arcI !== 0 || arcJ !== 0 || arcR !== null)) {
+        const cx = currentPos.x + arcI;
+        const cy = currentPos.y + arcJ;
+        const r = Math.hypot(arcI, arcJ);
+
+        const startAngle = Math.atan2(currentPos.y - cy, currentPos.x - cx);
+        const endAngle = Math.atan2(targetPos.y - cy, targetPos.x - cx);
+
+        let sweepAngle = 0;
+        if (motion === 2) {
+          // Sentido horário (CW)
+          sweepAngle = startAngle - endAngle;
+          if (sweepAngle <= 0) sweepAngle += 2 * Math.PI;
+        } else {
+          // Sentido anti-horário (CCW)
+          sweepAngle = endAngle - startAngle;
+          if (sweepAngle <= 0) sweepAngle += 2 * Math.PI;
+        }
+
+        const arcLen = sweepAngle * r;
+        const totalArcDist = Math.hypot(arcLen, dz);
+        const steps = Math.max(8, Math.min(64, Math.ceil(totalArcDist / 0.8)));
+
+        let prevArcPt = { ...currentPos };
+        for (let s = 1; s <= steps; s++) {
+          const t = s / steps;
+          const currAngle = motion === 2 ? startAngle - t * sweepAngle : startAngle + t * sweepAngle;
+          const px = cx + r * Math.cos(currAngle);
+          const py = cy + r * Math.sin(currAngle);
+          const pz = currentPos.z + t * dz;
+          const nextArcPt = { x: px, y: py, z: pz };
+          const segDist = Math.hypot(nextArcPt.x - prevArcPt.x, nextArcPt.y - prevArcPt.y, nextArcPt.z - prevArcPt.z);
+
+          segments.push({
+            line: lineIdx + 1,
+            type: 'arc',
+            from: { ...prevArcPt },
+            to: { ...nextArcPt },
+            dist: segDist,
+            feed: currentFeed,
+            motion
+          });
+
+          if (pz <= 0.05) {
+            minX = Math.min(minX, px);
+            maxX = Math.max(maxX, px);
+            minY = Math.min(minY, py);
+            maxY = Math.max(maxY, py);
+          }
+          minZ = Math.min(minZ, pz);
+          maxZ = Math.max(maxZ, pz);
+
+          prevArcPt = nextArcPt;
+        }
+
+        totalFeedDist += totalArcDist;
+        totalTimeMinutes += (totalArcDist / (currentFeed > 0 ? currentFeed : 1000));
+      } else if (linearDist > 0.0001) {
+        // Movimento Linear (G0 ou G1)
+        if (targetPos.z <= 0.05) {
+          minX = Math.min(minX, targetPos.x, currentPos.x);
+          maxX = Math.max(maxX, targetPos.x, currentPos.x);
+          minY = Math.min(minY, targetPos.y, currentPos.y);
+          maxY = Math.max(maxY, targetPos.y, currentPos.y);
+        }
+        minZ = Math.min(minZ, targetPos.z);
+        maxZ = Math.max(maxZ, targetPos.z);
+
+        const isRapid = motion === 0;
+        const feedForMove = isRapid ? rapidFeed : (currentFeed > 0 ? currentFeed : 1000);
+        totalTimeMinutes += (linearDist / feedForMove);
+
+        if (isRapid) {
+          totalRapidDist += linearDist;
+        } else {
+          totalFeedDist += linearDist;
+        }
+
+        segments.push({
+          line: lineIdx + 1,
+          type: isRapid ? 'rapid' : 'feed',
+          from: { ...currentPos },
+          to: { ...targetPos },
+          dist: linearDist,
+          feed: feedForMove,
+          motion
+        });
+      }
+
+      currentPos = targetPos;
+      points.push({ ...currentPos, line: lineIdx + 1 });
+    }
+  }
+
+  return {
+    segments,
+    points,
+    bounds: {
+      minX: minX === Infinity ? 0 : minX,
+      maxX: maxX === -Infinity ? 0 : maxX,
+      minY: minY === Infinity ? 0 : minY,
+      maxY: maxY === -Infinity ? 0 : maxY,
+      minZ: minZ === Infinity ? 0 : minZ,
+      maxZ: maxZ === -Infinity ? 0 : maxZ,
+      width: Math.max(0, maxX - minX),
+      height: Math.max(0, maxY - minY),
+      depth: Math.max(0, Math.abs(minZ))
+    },
+    totalRapidDist,
+    totalFeedDist,
+    totalDist: totalRapidDist + totalFeedDist,
+    estimatedMinutes: totalTimeMinutes,
+    totalLines: lines.length
+  };
+}
+
+/**
+ * Atualiza o cartão visual de estatísticas e validação preventiva do G-code
+ */
+function analyzeAndDisplayGCodeStats(gcodeText) {
+  if (!gcodeStatsCard || !statEstTime) return null;
+  const analysis = parseGCode(gcodeText);
+  simParsedData = analysis;
+
+  gcodeStatsCard.style.display = 'block';
+
+  // 1. Tempo Estimado de Fresagem
+  const totalSecs = Math.round(analysis.estimatedMinutes * 60);
+  const hrs = Math.floor(totalSecs / 3600);
+  const mins = Math.floor((totalSecs % 3600) / 60);
+  const secs = totalSecs % 60;
+  let timeStr = "";
+  if (hrs > 0) timeStr += `${hrs}h `;
+  timeStr += `${mins}m ${secs.toString().padStart(2, '0')}s`;
+  statEstTime.innerText = timeStr;
+
+  // 2. Extensão do eixo Z
+  statZRange.innerText = `${analysis.bounds.minZ.toFixed(2)} a ${analysis.bounds.maxZ.toFixed(1)} mm`;
+
+  // 3. Bounding Box (Área de trabalho real)
+  statBBox.innerText = `${analysis.bounds.width.toFixed(1)} x ${analysis.bounds.height.toFixed(1)} mm`;
+
+  // 4. Distâncias totais
+  statDistance.innerText = `${(analysis.totalDist / 1000).toFixed(2)} m (Corte: ${(analysis.totalFeedDist / 1000).toFixed(2)}m)`;
+
+  // 5. Validação de Segurança CAM Preventiva
+  const materialZ = parseCAMParam(inputMaterialZ, 10.0);
+  const tableX = parseCAMParam(inputTableX, 500);
+  const tableY = parseCAMParam(inputTableY, 500);
+  const wcsX = parseFloat(inputWcsX?.value) || 0;
+  const wcsY = parseFloat(inputWcsY?.value) || 0;
+
+  let hasError = false;
+  if (analysis.bounds.minZ < -materialZ - 0.05) {
+    gcodeSafetyAlert.className = 'safety-badge warning';
+    gcodeSafetyIcon.innerText = '⚠️';
+    gcodeSafetyMsg.innerText = `ALERTA: Z (${analysis.bounds.minZ.toFixed(1)}mm) ultrapassa o material (${materialZ}mm)! Risco de colisão na mesa.`;
+    hasError = true;
+  } else {
+    const absMinX = analysis.bounds.minX + wcsX;
+    const absMaxX = analysis.bounds.maxX + wcsX;
+    const absMinY = analysis.bounds.minY + wcsY;
+    const absMaxY = analysis.bounds.maxY + wcsY;
+
+    if (absMinX < -0.1 || absMaxX > tableX + 0.1 || absMinY < -0.1 || absMaxY > tableY + 0.1) {
+      gcodeSafetyAlert.className = 'safety-badge warning';
+      gcodeSafetyIcon.innerText = '⚠️';
+      gcodeSafetyMsg.innerText = `ALERTA: O percurso sai fora da área física da mesa CNC (${tableX}x${tableY}mm)!`;
+      hasError = true;
+    } else {
+      gcodeSafetyAlert.className = 'safety-badge safe';
+      gcodeSafetyIcon.innerText = '✅';
+      gcodeSafetyMsg.innerText = 'Percurso validado com sucesso dentro da mesa e material.';
+    }
+  }
+
+  // Atualizar badge superior do simulador
+  if (simStatusBadge && simStatusText) {
+    simStatusBadge.style.display = 'flex';
+    simStatusBadge.classList.add('ready');
+    simStatusText.innerText = `Simulação Pronta (${analysis.segments.length} blocos)`;
+  }
+
+  return analysis;
+}
+
+/* ==========================================================================
+   FASE 3: SIMULADOR 3D WEBGL INTEGRADO (THREE.JS + ORBIT CONTROLS)
+   ========================================================================== */
+
+/**
+ * Alterna entre a vista 2D (Editor Fabric.js) e 3D (Simulador WebGL)
+ */
+function switchViewMode(mode) {
+  currentViewMode = mode;
+  if (mode === '3d') {
+    tabView2d.classList.remove('active');
+    tabView3d.classList.add('active');
+    canvasContainer.style.display = 'none';
+    sim3dContainer.style.display = 'block';
+
+    initThreeSimulator();
+    if (threeRenderer && threeCamera) {
+      const w = sim3dContainer.clientWidth || 800;
+      const h = sim3dContainer.clientHeight || 600;
+      threeRenderer.setSize(w, h);
+      threeCamera.aspect = w / h;
+      threeCamera.updateProjectionMatrix();
+    }
+  } else {
+    tabView3d.classList.remove('active');
+    tabView2d.classList.add('active');
+    sim3dContainer.style.display = 'none';
+    canvasContainer.style.display = 'flex';
+    pauseSimulationPlayback();
+    if (canvas) canvas.requestRenderAll();
+  }
+}
+
+/**
+ * Inicializa a cena Three.js, iluminação, câmara e controlos de órbita
+ */
+function initThreeSimulator() {
+  if (threeScene) return; // Já inicializado
+  if (typeof THREE === 'undefined') {
+    console.warn("Three.js não se encontra disponível globalmente.");
+    return;
+  }
+
+  const container = sim3dContainer;
+  const canvasEl = document.getElementById('three-canvas');
+  const width = container.clientWidth || 800;
+  const height = container.clientHeight || 600;
+
+  // 1. Cena
+  threeScene = new THREE.Scene();
+  threeScene.background = new THREE.Color(0x080b11);
+
+  // 2. Câmara de Perspetiva com vista isométrica padrão CNC
+  threeCamera = new THREE.PerspectiveCamera(45, width / height, 1, 5000);
+  setThreeCameraPreset('iso');
+
+  // 3. Renderizador WebGL
+  threeRenderer = new THREE.WebGLRenderer({
+    canvas: canvasEl,
+    antialias: true,
+    powerPreference: 'high-performance'
+  });
+  threeRenderer.setSize(width, height);
+  threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+  // 4. Controlos de Órbita
+  if (typeof THREE.OrbitControls !== 'undefined') {
+    threeControls = new THREE.OrbitControls(threeCamera, threeRenderer.domElement);
+    threeControls.enableDamping = true;
+    threeControls.dampingFactor = 0.05;
+    threeControls.maxPolarAngle = Math.PI / 2 + 0.1; // não descer muito abaixo da mesa
+  }
+
+  // 5. Iluminação
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+  threeScene.add(ambientLight);
+
+  const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+  dirLight1.position.set(200, 400, 300);
+  threeScene.add(dirLight1);
+
+  const dirLight2 = new THREE.DirectionalLight(0x38bdf8, 0.4);
+  dirLight2.position.set(-200, -200, -100);
+  threeScene.add(dirLight2);
+
+  // 6. Construir Mesa Física e Bloco de Material
+  buildThreeTableAndMaterial();
+
+  // 7. Loop de Renderização Contínuo
+  function animateThree() {
+    requestAnimationFrame(animateThree);
+    if (threeControls) threeControls.update();
+    if (threeRenderer && threeScene && threeCamera && currentViewMode === '3d') {
+      threeRenderer.render(threeScene, threeCamera);
+    }
+  }
+  animateThree();
+
+  // Redimensionamento
+  window.addEventListener('resize', () => {
+    if (currentViewMode === '3d' && threeRenderer && threeCamera) {
+      const w = sim3dContainer.clientWidth || 800;
+      const h = sim3dContainer.clientHeight || 600;
+      threeCamera.aspect = w / h;
+      threeCamera.updateProjectionMatrix();
+      threeRenderer.setSize(w, h);
+    }
+  });
+}
+
+/**
+ * Constrói a mesa CNC tridimensional e o bloco de material transparente
+ */
+function buildThreeTableAndMaterial() {
+  if (!threeScene) return;
+
+  // Remover elementos anteriores se existirem
+  if (threeTableMesh) threeScene.remove(threeTableMesh);
+  if (threeMaterialMesh) threeScene.remove(threeMaterialMesh);
+
+  const tableX = parseCAMParam(inputTableX, 500);
+  const tableY = parseCAMParam(inputTableY, 500);
+  const materialZ = parseCAMParam(inputMaterialZ, 10.0);
+  const wcsX = parseFloat(inputWcsX?.value) || 0;
+  const wcsY = parseFloat(inputWcsY?.value) || 0;
+
+  // 1. Grupo da Mesa CNC
+  threeTableMesh = new THREE.Group();
+
+  // Placa de sacrifício metálica
+  const tableGeo = new THREE.BoxGeometry(tableX, 15, tableY);
+  const tableMat = new THREE.MeshStandardMaterial({
+    color: 0x1e293b,
+    roughness: 0.6,
+    metalness: 0.4
+  });
+  const tablePlate = new THREE.Mesh(tableGeo, tableMat);
+  tablePlate.position.set(tableX / 2 - wcsX, -materialZ - 7.5, -(tableY / 2 - wcsY));
+  threeTableMesh.add(tablePlate);
+
+  // Grelha milimétrica sobre a mesa
+  const gridHelper = new THREE.GridHelper(Math.max(tableX, tableY), 50, 0xf97316, 0x334155);
+  gridHelper.position.set(tableX / 2 - wcsX, -materialZ + 0.05, -(tableY / 2 - wcsY));
+  threeTableMesh.add(gridHelper);
+
+  // Eixos de Coordenadas WCS (Origem X0 Y0 Z0)
+  const axesHelper = new THREE.AxesHelper(60);
+  axesHelper.position.set(0, 0, 0); // No ponto zero da peça!
+  threeTableMesh.add(axesHelper);
+
+  threeScene.add(threeTableMesh);
+
+  // 2. Bloco translúcido de material (Acrílico/Madeira no quadrante da peça)
+  const matGeo = new THREE.BoxGeometry(tableX, materialZ, tableY);
+  const matMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0x38bdf8,
+    transparent: true,
+    opacity: 0.15,
+    roughness: 0.3,
+    transmission: 0.6,
+    thickness: 5.0
+  });
+  threeMaterialMesh = new THREE.Mesh(matGeo, matMaterial);
+  threeMaterialMesh.position.set(tableX / 2 - wcsX, -materialZ / 2, -(tableY / 2 - wcsY));
+  threeScene.add(threeMaterialMesh);
+}
+
+/**
+ * Cria o modelo 3D dinâmico da fresa de router CNC
+ */
+function buildThreeCutterTool(toolType, toolDia) {
+  if (!threeScene) return;
+  if (threeCutterTool) threeScene.remove(threeCutterTool);
+
+  const group = new THREE.Group();
+  const dia = toolDia || 3.175;
+  const radius = dia / 2;
+
+  // Corpo / Pinça do Spindle (Cilindro superior preto/metálico)
+  const colletGeo = new THREE.CylinderGeometry(8, 8, 25, 24);
+  const colletMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.3, metalness: 0.8 });
+  const collet = new THREE.Mesh(colletGeo, colletMat);
+  collet.position.y = 20 + 12.5;
+  group.add(collet);
+
+  // Haste da fresa (Aço prateado)
+  const shankGeo = new THREE.CylinderGeometry(radius, radius, 20, 24);
+  const shankMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.2, metalness: 0.9 });
+  const shank = new THREE.Mesh(shankGeo, shankMat);
+  shank.position.y = 10;
+  group.add(shank);
+
+  // Ponta activa da fresa dependente do Tipo
+  let tipMesh;
+  const tipMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.3, metalness: 0.7 }); // Dourado metal duro
+
+  if (toolType === 'ball') {
+    // Fresa Esférica: ponta arredondada
+    const sphereGeo = new THREE.SphereGeometry(radius, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+    tipMesh = new THREE.Mesh(sphereGeo, tipMat);
+    tipMesh.rotation.x = Math.PI;
+    tipMesh.position.y = radius;
+  } else if (toolType === 'vbit') {
+    // Fresa Cónica / V-Bit
+    const coneGeo = new THREE.ConeGeometry(radius, radius * 2, 24);
+    tipMesh = new THREE.Mesh(coneGeo, tipMat);
+    tipMesh.rotation.x = Math.PI;
+    tipMesh.position.y = radius;
+  } else {
+    // Topo Plano padrão
+    const flatGeo = new THREE.CylinderGeometry(radius, radius, 2, 24);
+    tipMesh = new THREE.Mesh(flatGeo, tipMat);
+    tipMesh.position.y = 1;
+  }
+  group.add(tipMesh);
+
+  threeCutterTool = group;
+  threeScene.add(threeCutterTool);
+}
+
+/**
+ * Carrega o G-code no motor 3D, criando as malhas de linhas rápidas e linhas de corte
+ */
+function loadGCodeInto3DSimulator(gcodeText) {
+  if (!threeScene) initThreeSimulator();
+  if (!threeScene) return;
+
+  const analysis = simParsedData || parseGCode(gcodeText);
+  simParsedData = analysis;
+  simSegments = analysis.segments;
+  simCurrentIndex = 0;
+
+  // Reconstruir mesa física com os offsets mais recentes
+  buildThreeTableAndMaterial();
+
+  // Construir a fresa tridimensional actual
+  const toolDia = parseCAMParam(inputToolDia, 3.175);
+  const toolType = paramToolType ? paramToolType.value : 'flat';
+  buildThreeCutterTool(toolType, toolDia);
+
+  // Limpar malhas de percursos anteriores
+  if (toolpathRapidMesh) threeScene.remove(toolpathRapidMesh);
+  if (toolpathCutMesh) threeScene.remove(toolpathCutMesh);
+
+  // Coordenadas Three.js: X = X_cnc, Y = Z_cnc (altura), Z = -Y_cnc (profundidade)
+  const rapidPoints = [];
+  const cutPoints = [];
+
+  simSegments.forEach(seg => {
+    const p1 = new THREE.Vector3(seg.from.x, seg.from.z, -seg.from.y);
+    const p2 = new THREE.Vector3(seg.to.x, seg.to.z, -seg.to.y);
+
+    if (seg.type === 'rapid') {
+      rapidPoints.push(p1, p2);
+    } else {
+      cutPoints.push(p1, p2);
+    }
+  });
+
+  // 1. Percursos Rápidos (G0): Ciano translúcido
+  if (rapidPoints.length > 0) {
+    const rapidGeo = new THREE.BufferGeometry().setFromPoints(rapidPoints);
+    const rapidMat = new THREE.LineBasicMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.35
+    });
+    toolpathRapidMesh = new THREE.LineSegments(rapidGeo, rapidMat);
+    threeScene.add(toolpathRapidMesh);
+  }
+
+  // 2. Percursos de Corte (G1/G2/G3): Verde néon vibrante de alta visibilidade
+  if (cutPoints.length > 0) {
+    const cutGeo = new THREE.BufferGeometry().setFromPoints(cutPoints);
+    const cutMat = new THREE.LineBasicMaterial({
+      color: 0x10b981,
+      linewidth: 2
+    });
+    toolpathCutMesh = new THREE.LineSegments(cutGeo, cutMat);
+    threeScene.add(toolpathCutMesh);
+  }
+
+  // Posicionar a fresa no ponto inicial
+  if (simSegments.length > 0 && threeCutterTool) {
+    const start = simSegments[0].from;
+    threeCutterTool.position.set(start.x, start.z, -start.y);
+    updateDRODisplay(start.x, start.y, start.z, 0, 1, simSegments.length, 0);
+  }
+
+  if (simTimeline) {
+    simTimeline.value = 0;
+    if (simProgressText) simProgressText.innerText = "0.0%";
+  }
+}
+
+/**
+ * Controla o Play / Pausa da simulação interactiva
+ */
+function toggleSimulationPlay() {
+  if (simIsPlaying) {
+    pauseSimulationPlayback();
+  } else {
+    startSimulationPlayback();
+  }
+}
+
+function startSimulationPlayback() {
+  if (!simSegments || simSegments.length === 0) return;
+  simIsPlaying = true;
+  if (btnSimPlay) btnSimPlay.innerText = "⏸️ Pausar";
+
+  let lastTime = performance.now();
+
+  function playbackStep(now) {
+    if (!simIsPlaying) return;
+    const dt = (now - lastTime) / 1000;
+    lastTime = now;
+
+    // Avançar passos proporcionalmente à taxa de avanço e multiplicador
+    const seg = simSegments[simCurrentIndex];
+    if (seg) {
+      const feed = seg.feed || 1200;
+      const speedMmPerSec = (feed / 60) * simSpeedMultiplier;
+      const stepsToAdvance = Math.max(1, Math.round((speedMmPerSec * dt) / Math.max(0.5, seg.dist)));
+
+      simCurrentIndex = Math.min(simSegments.length - 1, simCurrentIndex + stepsToAdvance);
+      const activeSeg = simSegments[simCurrentIndex];
+
+      if (threeCutterTool && activeSeg) {
+        threeCutterTool.position.set(activeSeg.to.x, activeSeg.to.z, -activeSeg.to.y);
+        const pct = ((simCurrentIndex + 1) / simSegments.length) * 100;
+        if (simTimeline) simTimeline.value = pct;
+        if (simProgressText) simProgressText.innerText = `${pct.toFixed(1)}%`;
+        updateDRODisplay(activeSeg.to.x, activeSeg.to.y, activeSeg.to.z, activeSeg.feed, activeSeg.line, simSegments.length, pct);
+      }
+
+      if (simCurrentIndex >= simSegments.length - 1) {
+        pauseSimulationPlayback();
+        return;
+      }
+    }
+
+    simAnimId = requestAnimationFrame(playbackStep);
+  }
+
+  simAnimId = requestAnimationFrame(playbackStep);
+}
+
+function pauseSimulationPlayback() {
+  simIsPlaying = false;
+  if (btnSimPlay) btnSimPlay.innerText = "▶️ Reproduzir";
+  if (simAnimId) cancelAnimationFrame(simAnimId);
+}
+
+function resetSimulation() {
+  pauseSimulationPlayback();
+  simCurrentIndex = 0;
+  if (simSegments && simSegments.length > 0 && threeCutterTool) {
+    const start = simSegments[0].from;
+    threeCutterTool.position.set(start.x, start.z, -start.y);
+    updateDRODisplay(start.x, start.y, start.z, 0, 1, simSegments.length, 0);
+  }
+  if (simTimeline) simTimeline.value = 0;
+  if (simProgressText) simProgressText.innerText = "0.0%";
+}
+
+function seekSimulation(pct) {
+  if (!simSegments || simSegments.length === 0) return;
+  const targetIdx = Math.min(simSegments.length - 1, Math.floor((pct / 100) * simSegments.length));
+  simCurrentIndex = targetIdx;
+  const seg = simSegments[targetIdx];
+  if (seg && threeCutterTool) {
+    threeCutterTool.position.set(seg.to.x, seg.to.z, -seg.to.y);
+    updateDRODisplay(seg.to.x, seg.to.y, seg.to.z, seg.feed, seg.line, simSegments.length, pct);
+  }
+  if (simProgressText) simProgressText.innerText = `${pct.toFixed(1)}%`;
+}
+
+/**
+ * Ajusta a câmara para vistas predefinidas (Isométrica, Topo 2D ou Frente)
+ */
+function setThreeCameraPreset(preset) {
+  if (!threeCamera) return;
+  const tableX = parseCAMParam(inputTableX, 500);
+  const tableY = parseCAMParam(inputTableY, 500);
+  const maxDim = Math.max(tableX, tableY);
+
+  if (preset === 'top') {
+    threeCamera.position.set(0, maxDim * 1.6, 0);
+    threeCamera.lookAt(0, 0, 0);
+  } else if (preset === 'front') {
+    threeCamera.position.set(0, 50, maxDim * 1.5);
+    threeCamera.lookAt(0, 0, 0);
+  } else {
+    // Isométrica padrão 45°
+    threeCamera.position.set(maxDim * 0.9, maxDim * 1.1, maxDim * 1.1);
+    threeCamera.lookAt(0, 0, 0);
+  }
+  if (threeControls) {
+    threeControls.target.set(0, 0, 0);
+    threeControls.update();
+  }
+}
+
+/**
+ * Atualiza o painel DRO (Digital Read Out) em tempo real
+ */
+function updateDRODisplay(x, y, z, feed, currentLine, totalLines, pct) {
+  if (droX) droX.innerText = x.toFixed(2);
+  if (droY) droY.innerText = y.toFixed(2);
+  if (droZ) droZ.innerText = z.toFixed(2);
+  if (droF) droF.innerText = Math.round(feed || 0);
+  if (droLine) droLine.innerText = `${currentLine || 0} / ${totalLines || 0}`;
+}
+
 async function downloadGCode() {
   try {
     if (!lastGeneratedGCode) {
@@ -3076,15 +3893,17 @@ async function saveAppState() {
       depthTotal: parseFloat(inputDepthTotal.value),
       depthPass: parseFloat(inputDepthPass.value),
       strategy: selectStrategy.value,
+      toolType: paramToolType ? paramToolType.value : 'flat',
+      stepover: inputStepover ? parseFloat(inputStepover.value) : 40,
+      useArcs: paramUseArcs ? paramUseArcs.checked : true,
       tableX: parseFloat(inputTableX.value),
       tableY: parseFloat(inputTableY.value),
       materialZ: parseFloat(inputMaterialZ.value),
       originType: selectOriginType.value,
       wcsX: parseFloat(inputWcsX.value),
       wcsY: parseFloat(inputWcsY.value),
-      activeToolId: selectToolLibrary ? selectToolLibrary.value : 'flat-3175',
-      toolModule: selectToolModule ? selectToolModule.value : 'spindle',
-      spindleSpeed: parseFloat(inputSpindleSpeed.value)
+      activeToolId: selectToolLibrary ? selectToolLibrary.value : 'flat-6000',
+      spindleSpeed: parseFloat(inputSpindleSpeed.value) || 18000
     }
   };
 
@@ -3111,7 +3930,7 @@ async function loadAppState() {
       const p = appState.cncParams;
       inputToolDia.value = p.toolDia || 3.175;
       inputSafeZ.value = p.safeZ || 5.0;
-      inputFeedXY.value = p.feedXY || 1200;
+      inputFeedXY.value = p.feedXY || 1400;
       inputFeedZ.value = p.feedZ || 400;
       inputDepthTotal.value = p.depthTotal || -3.0;
       inputDepthPass.value = p.depthPass || 1.0;
@@ -3119,15 +3938,19 @@ async function loadAppState() {
       inputTableX.value = p.tableX || 500;
       inputTableY.value = p.tableY || 500;
       inputMaterialZ.value = p.materialZ || 10.0;
-      selectOriginType.value = p.originType || 'center';
-      inputWcsX.value = p.wcsX !== undefined ? p.wcsX : 250.0;
-      inputWcsY.value = p.wcsY !== undefined ? p.wcsY : 250.0;
+      selectOriginType.value = p.originType || 'bottom-left';
+      inputWcsX.value = p.wcsX !== undefined ? p.wcsX : 0.0;
+      inputWcsY.value = p.wcsY !== undefined ? p.wcsY : 0.0;
+      
+      if (p.toolType && paramToolType) paramToolType.value = p.toolType;
+      if (p.stepover !== undefined && inputStepover) inputStepover.value = p.stepover;
+      if (p.useArcs !== undefined && paramUseArcs) paramUseArcs.checked = p.useArcs;
+      if (p.spindleSpeed !== undefined && inputSpindleSpeed) inputSpindleSpeed.value = p.spindleSpeed;
       
       if (p.activeToolId && selectToolLibrary) {
         selectToolLibrary.value = p.activeToolId;
       }
       
-      updateModuleUI(p.toolModule || 'spindle', p.spindleSpeed || 12000);
       setWCSInputsReadonly(selectOriginType.value !== 'custom');
       updateTableSize();
     }
