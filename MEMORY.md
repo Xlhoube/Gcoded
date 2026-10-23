@@ -4,7 +4,7 @@
 - **Nome do Projecto:** Gcoded
 - **Objectivo:** Criar um gerador de percursos de corte (CAM/toolpath generator) interativo para máquinas CNC, a correr no browser de forma 100% local e offline-first. O utilizador poderá criar ou importar desenhos, configurar parâmetros da fresadora, gerar percursos e exportar o G-code. Todos os dados são guardados localmente no browser (`localStorage`) e através de exportação de ficheiros JSON.
 - **Data de Início:** 2026-08-21
-- **Versão Actual:** v0.5.0
+- **Versão Actual:** v0.5.1
 - **Nível de Risco:** 1 (Baixo - protótipo rápido, sem base de dados remota)
 - **Ambiente de Deploy:** Vercel (servido como site estático)
 
@@ -66,7 +66,14 @@
     1. **Fase 1 (Parser & Verificador Preventivo):** Implementado motor modal de análise G-code para extrair Bounding Box X/Y/Z, cálculo rigoroso de tempo estimado de maquinação (considerando avanços de corte e avanço rápido de 3000 mm/min) e alerta de segurança proativo em caso de invasão de limites da mesa ou mergulho inferior à espessura do material.
     2. **Fase 2 (Arcos Nativos G2/G3):** Otimizador CAM com suporte a interpolação circular nativa usando vetores relativos I e J no plano XY (G17), gerando círculos e curvas suaves de elevada precisão com código G-code limpo e compacto.
     3. **Fase 3 (Simulador 3D WebGL com Three.js):** Renderização tridimensional interativa com mesa de trabalho em grelha cinzenta e origens X/Y/Z, bloco de material translúcido iluminado, linhas tridimensionais diferenciadas por cor (vermelho para G0 rápido, azul para G1/G2/G3 de corte), ferramenta/fresa animada em 3D, painel DRO digital (X, Y, Z, F e Linha) e barra de controlo de reprodução (Play, Pausa, Reset, Timeline e velocidades 0.5x até 10x).
-    4. **Reformulação Exclusiva de Ferramentas (CNC Routers):** Barra lateral e biblioteca modal reorganizadas para operar unicamente com fresas de router (End Mill, Ball Nose, V-Bit, Fresa de Aplanar), parâmetros de rotação Spindle (RPM) e passo lateral (*Stepover* %), com eliminação integral de módulos EOT/lâminas de arrasto.
+- **[2026-10-23] | DECISÃO-015 | Visualização 2D de Relevo, Feedback Táctil CAM e Notificação Toast**
+  - **Contexto:** Ao clicar em "Gerar Trajectória" com uma imagem de relevo na mesa, o canvas 2D não desenhava qualquer percurso visual (ao contrário dos contornos vectoriais que recebiam linhas azuis tracejadas), a consola G-code ficava no fundo da barra lateral fora da visão imediata e não havia feedback de estado no botão, levando o utilizador a concluir que "nada acontecia".
+  - **Decisão:** 
+    1. Amostragem e renderização no Canvas 2D das linhas raster em zigue-zague de maquinação (em azul `#60a5fa`) sobre a imagem do relevo, dando feedback visual instantâneo do corte sobre a peça.
+    2. Feedback reactivo no botão `btnGenerate`: transição imediata para `⏳ A gerar trajectória...` e conclusão com `✅ Trajectória Gerada!` em verde néon.
+    3. Notificação Toast flutuante (`#cam-toast`) com atalho direto `[👁️ Abrir Simulador 3D]` e pulso dinâmico no botão do simulador.
+    4. Scroll automático suave para o cartão de estatísticas e consola G-code.
+    5. Protecção resiliente de dados: caso um objecto de imagem não possua temporariamente `reliefSettings` ou `depthMap`, o sistema regenera-os dinamicamente em tempo de execução sem falhas silenciosas.
 
 ---
 
