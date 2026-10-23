@@ -4,7 +4,7 @@
 - **Nome do Projecto:** Gcoded
 - **Objectivo:** Criar um gerador de percursos de corte (CAM/toolpath generator) interativo para máquinas CNC, a correr no browser de forma 100% local e offline-first. O utilizador poderá criar ou importar desenhos, configurar parâmetros da fresadora, gerar percursos e exportar o G-code. Todos os dados são guardados localmente no browser (`localStorage`) e através de exportação de ficheiros JSON.
 - **Data de Início:** 2026-08-21
-- **Versão Actual:** v0.5.1
+- **Versão Actual:** v0.5.2
 - **Nível de Risco:** 1 (Baixo - protótipo rápido, sem base de dados remota)
 - **Ambiente de Deploy:** Vercel (servido como site estático)
 
@@ -74,6 +74,12 @@
     3. Notificação Toast flutuante (`#cam-toast`) com atalho direto `[👁️ Abrir Simulador 3D]` e pulso dinâmico no botão do simulador.
     4. Scroll automático suave para o cartão de estatísticas e consola G-code.
     5. Protecção resiliente de dados: caso um objecto de imagem não possua temporariamente `reliefSettings` ou `depthMap`, o sistema regenera-os dinamicamente em tempo de execução sem falhas silenciosas.
+- **[2026-10-23] | DECISÃO-016 | Resolução de Cache do Browser (Cache Busting v=0.5.2) e Transição 3D Automática**
+  - **Contexto:** O browser do utilizador mantinha em cache agressivo a versão anterior do script `src/app.js` servido pelo servidor local, e o listener `DOMContentLoaded` em scripts do tipo módulo (`type="module"`) corria risco de não disparar caso o documento já estivesse no estado `interactive`/`complete`.
+  - **Decisão:**
+    1. **Cache Busting Forçado:** Adicionado parâmetro de versão `src/app.js?v=0.5.2` em `index.html`, obrigando o browser a descarregar o novo código imediatamente.
+    2. **Inicialização Resiliente:** Substituição de `DOMContentLoaded` cego por verificação de `document.readyState` (`if (document.readyState === 'loading') ... else init()`).
+    3. **Transição Automática para 3D:** Ao gerar a trajectória de um relevo 3D, a aplicação comuta automaticamente e de forma suave para o separador `[👁️ Simulador 3D (WebGL)]` e inicia a maquinação da fresa em tempo real, eliminando qualquer dúvida visual.
 
 ---
 
