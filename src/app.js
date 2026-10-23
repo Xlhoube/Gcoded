@@ -2471,6 +2471,34 @@ function parseCAMParam(inputElement, defaultValue) {
   return val;
 }
 
+let toastTimeout = null;
+/**
+ * Exibe notificação flutuante com ação rápida para abrir o Simulador 3D
+ */
+function showCamToast(message, onAction) {
+  const toast = document.getElementById('cam-toast');
+  const msgEl = document.getElementById('cam-toast-msg');
+  const actionBtn = document.getElementById('cam-toast-action');
+  if (!toast || !msgEl) return;
+
+  msgEl.innerText = message;
+  if (actionBtn && onAction) {
+    actionBtn.style.display = 'flex';
+    actionBtn.onclick = () => {
+      toast.classList.remove('visible');
+      onAction();
+    };
+  } else if (actionBtn) {
+    actionBtn.style.display = 'none';
+  }
+
+  toast.classList.add('visible');
+  if (toastTimeout) clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => {
+    toast.classList.remove('visible');
+  }, 7000);
+}
+
 /**
  * MOTOR CAM: Gera percursos em G-code e desenha visualização 3D simulada
  */
@@ -2479,13 +2507,19 @@ function generateGCode() {
     // 1. Filtrar apenas objectos de desenho (ignorar percursos visuais e marcadores)
     const allObjects = canvas.getObjects().filter(obj => !obj.isVisualPath && !obj.isOriginMarker);
     if (allObjects.length === 0) {
-      alert("Adiciona pelo menos uma forma ao canvas antes de gerar a trajectória!");
+      alert("Adiciona pelo menos uma forma ou imagem ao canvas antes de gerar a trajectória!");
       return;
     }
 
-    // Separar objectos de relevo (imagens 3D) dos contornos normais
-    const reliefObjects = allObjects.filter(obj => obj.isReliefImage);
-    const contourObjects = allObjects.filter(obj => !obj.isReliefImage);
+    // Feedback visual imediato no botão
+    if (btnGenerate) {
+      btnGenerate.innerText = "⏳ A gerar trajectória...";
+      btnGenerate.style.opacity = "0.75";
+    }
+
+    // Separar objectos de relevo (imagens 3D ou imagens gerais) dos contornos vectoriais
+    const reliefObjects = allObjects.filter(obj => obj.isReliefImage || obj.type === 'image');
+    const contourObjects = allObjects.filter(obj => !obj.isReliefImage && obj.type !== 'image');
 
     // Limpar visualizações antigas
     clearVisualToolpaths();
@@ -2505,11 +2539,15 @@ function generateGCode() {
     if (contourObjects.length > 0) {
       if (depthTotal >= 0) {
         alert("A profundidade total tem de ser um valor negativo (abaixo da superfície de corte)!");
+        if (btnGenerate) { btnGenerate.innerText = "⚙️ Gerar Trajectória"; btnGenerate.style.opacity = ""; }
         return;
       }
       if (Math.abs(depthTotal) > materialZ) {
-        gcodeOutputText.value = `❌ ERRO DE SEGURANÇA:\nA profundidade total de corte (${Math.abs(depthTotal)} mm) excede a espessura do material (${materialZ} mm).\nAjusta a profundidade ou a espessura para evitar colisão e danos na mesa da máquina.`;
+        const errMsg = `❌ ERRO DE SEGURANÇA:\nA profundidade total de corte (${Math.abs(depthTotal)} mm) excede a espessura do material (${materialZ} mm).\nAjusta a profundidade ou a espessura para evitar colisão e danos na mesa da máquina.`;
+        gcodeOutputText.value = errMsg;
         gcodeOutputText.style.color = "var(--danger)";
+        alert(errMsg);
+        if (btnGenerate) { btnGenerate.innerText = "⚙️ Gerar Trajectória"; btnGenerate.style.opacity = ""; }
         return;
       }
     }
@@ -2520,8 +2558,11 @@ function generateGCode() {
         const rs = fabricImg.reliefSettings;
         const maxDepth = rs ? (rs.maxDepth || 2.0) : 2.0;
         if (maxDepth > materialZ) {
-          gcodeOutputText.value = `❌ ERRO DE SEGURANÇA:\nA profundidade do relevo (${maxDepth.toFixed(1)} mm) excede a espessura do material (${materialZ} mm).\nAjusta a profundidade do relevo ou a espessura para evitar colisão e danos na mesa da máquina.`;
+          const errMsg = `❌ ERRO DE SEGURANÇA:\nA profundidade do relevo (${maxDepth.toFixed(1)} mm) excede a espessura do material (${materialZ} mm).\nAjusta a profundidade do relevo ou a espessura para evitar colisão e danos na mesa da máquina.`;
+          gcodeOutputText.value = errMsg;
           gcodeOutputText.style.color = "var(--danger)";
+          alert(errMsg);
+          if (btnGenerate) { btnGenerate.innerText = "⚙️ Gerar Trajectória"; btnGenerate.style.opacity = ""; }
           return;
         }
       }
@@ -2542,21 +2583,29 @@ function generateGCode() {
     const wcsX = parseFloat(inputWcsX?.value) || 0;
     const wcsY = parseFloat(inputWcsY?.value) || 0;
 
+    // Colecção de percursos para desenhar no Canvas 2D
+    const toolpathsToVisualise = [];
+
     // 4A. PROCESSAR OBJECTOS DE RELEVO 3D (Raster G-code)
     if (reliefObjects.length > 0) {
       reliefObjects.forEach((fabricImg, imgIdx) => {
-        const rs = fabricImg.reliefSettings;
-        if (!rs) return;
+        // Garantir que reliefSettings existe com valores por omissão
+        let rs = fabricImg.reliefSettings;
+        if (!rs) {
+          rs = { maxDepth: 2.0, doublePass: false, mode: 'luminance' };
+          fabricImg.reliefSettings = rs;
+          fabricImg.isReliefImage = true;
+        }
 
-        const img = fabricImg.reliefImgEl || (() => {
+        const img = fabricImg.reliefImgEl || fabricImg.getElement() || (() => {
           const i = new Image();
-          i.src = fabricImg.reliefSrc;
+          i.src = fabricImg.reliefSrc || fabricImg._element?.src;
           return i;
         })();
 
         // Dimensões actuais do objecto na mesa (em mm)
-        const objWidthPx = fabricImg.width * fabricImg.scaleX;
-        const objHeightPx = fabricImg.height * fabricImg.scaleY;
+        const objWidthPx = fabricImg.width * (fabricImg.scaleX || 1);
+        const objHeightPx = fabricImg.height * (fabricImg.scaleY || 1);
         const objWidthMM = objWidthPx / ESCALA_MM_PX;
         const objHeightMM = objHeightPx / ESCALA_MM_PX;
 
@@ -2564,16 +2613,36 @@ function generateGCode() {
         const objLeftMM = fabricImg.left / ESCALA_MM_PX;
         const objTopMM = (canvas.height - (fabricImg.top + objHeightPx)) / ESCALA_MM_PX;
 
-        // Obter mapa de profundidade pré-calculado (IA ou Luminância)
-        const dm = fabricImg.reliefDepthMap;
-        const dmW = fabricImg.reliefDepthWidth;
-        const dmH = fabricImg.reliefDepthHeight;
+        // Obter ou regenerar mapa de profundidade
+        let dm = fabricImg.reliefDepthMap;
+        let dmW = fabricImg.reliefDepthWidth;
+        let dmH = fabricImg.reliefDepthHeight;
+        if (!dm || !dmW || !dmH) {
+          if (img && (img.complete || img.naturalWidth > 0)) {
+            const res = processImageToDepthMap(img, {
+              blur: rs.blur || 0,
+              gamma: rs.gamma || 1.0,
+              invert: !!rs.invert,
+              scaleFactor: 0.5,
+              mode: rs.mode || 'luminance',
+              detail: rs.detail || 75,
+              bgCut: rs.bgCut || 15,
+              lightBalance: rs.lightBalance || 50
+            });
+            dm = res.depthMap;
+            dmW = res.width;
+            dmH = res.height;
+            fabricImg.reliefDepthMap = dm;
+            fabricImg.reliefDepthWidth = dmW;
+            fabricImg.reliefDepthHeight = dmH;
+          }
+        }
+
         const maxDepth = rs.maxDepth || 2.0;
 
         function getReliefZ(xMM, yMM) {
           if (!dm || !dmW || !dmH) return 0;
           const u = Math.min(1, Math.max(0, xMM / objWidthMM));
-          // yMM grows bottom-up (machine Y) while depth map row 0 is the image top
           const v = 1 - Math.min(1, Math.max(0, yMM / objHeightMM));
           const px = Math.min(dmW - 1, Math.max(0, Math.round(u * (dmW - 1))));
           const py = Math.min(dmH - 1, Math.max(0, Math.round(v * (dmH - 1))));
@@ -2581,17 +2650,16 @@ function generateGCode() {
         }
 
         // Resolução transversal em Y (stepover) e ao longo de X (stepX)
-        // Para relevo 3D de acabamento, o stepover transversal deve ser uma fracção do diâmetro (aprox. 35%)
         const stepY = Math.max(0.2, toolDia * 0.35);
-        // Resolução ao longo de X: amostragem contínua fina proporcional à matriz de profundidade (0.25mm a 0.8mm)
-        const stepX = Math.max(0.25, Math.min(0.8, objWidthMM / Math.max(1, dmW)));
+        const stepX = Math.max(0.25, Math.min(0.8, objWidthMM / Math.max(1, dmW || 100)));
 
         // Posição de arranque segura
         gcode.push(`G0 Z${safeZ.toFixed(3)}`);
 
-        // Padrão Zig-Zag contínuo sem retracções desnecessárias a meio da fresagem
+        // Padrão Zig-Zag contínuo
         let forward = true;
         let currentY = 0;
+        let lineIdxCounter = 0;
 
         const startX = 0;
         const startY = 0;
@@ -2608,6 +2676,18 @@ function generateGCode() {
             const z = getReliefZ(x, currentY);
             gcode.push(`G1 X${(objLeftMM + x - wcsX).toFixed(3)} Y${(objTopMM + currentY - wcsY).toFixed(3)} Z${z.toFixed(3)} F${feedXY.toFixed(0)}`);
           }
+
+          // Recolher amostragem de linha visual para renderizar sobre a imagem no Canvas 2D
+          if (lineIdxCounter % 3 === 0) {
+            const canvasY = canvas.height - ((objTopMM + currentY) * ESCALA_MM_PX);
+            const canvasX1 = (objLeftMM + xs) * ESCALA_MM_PX;
+            const canvasX2 = (objLeftMM + xe) * ESCALA_MM_PX;
+            toolpathsToVisualise.push([
+              { x: canvasX1, y: canvasY },
+              { x: canvasX2, y: canvasY }
+            ]);
+          }
+          lineIdxCounter++;
 
           // Avanço suave em Y para a próxima linha sem levantar a fresa para Z_safe
           currentY += stepY;
@@ -2626,7 +2706,7 @@ function generateGCode() {
           let btt = true;
           let currentX = 0;
           const stepXCross = Math.max(0.2, toolDia * 0.35);
-          const stepYCross = Math.max(0.25, Math.min(0.8, objHeightMM / Math.max(1, dmH)));
+          const stepYCross = Math.max(0.25, Math.min(0.8, objHeightMM / Math.max(1, dmH || 100)));
 
           const zCrossInit = getReliefZ(0, 0);
           gcode.push(`G0 X${(objLeftMM - wcsX).toFixed(3)} Y${(objTopMM - wcsY).toFixed(3)}`);
@@ -2656,7 +2736,6 @@ function generateGCode() {
     }
 
     // 4B. Processar Geometria de contornos normais (rectângulos, círculos, linhas, SVG)
-    const toolpathsToVisualise = [];
 
     // 4. Processar Geometria de cada objecto de contorno no Canvas
     contourObjects.forEach((obj, idx) => {
@@ -2892,7 +2971,7 @@ function generateGCode() {
     gcodeOutputText.value = cleanGCode;
 
     // FASE 1: Parser e Diagnóstico de Segurança CAM (Baseado no Of4W)
-    analyzeAndDisplayGCodeStats(cleanGCode);
+    const analysis = analyzeAndDisplayGCodeStats(cleanGCode);
 
     // FASE 3: Carregar percurso no Simulador 3D WebGL (Three.js)
     loadGCodeInto3DSimulator(cleanGCode);
@@ -2905,9 +2984,48 @@ function generateGCode() {
 
     // 7. Desenhar percursos pontilhados no canvas para simulação
     drawVisualToolpaths(toolpathsToVisualise);
+
+    // 8. Feedback visual de sucesso imediato no botão
+    if (btnGenerate) {
+      btnGenerate.innerText = "✅ Trajectória Gerada!";
+      btnGenerate.style.background = "linear-gradient(135deg, #10b981, #059669)";
+      btnGenerate.style.opacity = "1";
+      setTimeout(() => {
+        btnGenerate.innerText = "⚙️ Gerar Trajectória";
+        btnGenerate.style.background = "";
+      }, 3000);
+    }
+
+    // 9. Fazer pulsar o botão de abrir Simulador 3D
+    if (btnOpenSim3d) {
+      btnOpenSim3d.classList.add('btn-pulsing');
+      setTimeout(() => btnOpenSim3d.classList.remove('btn-pulsing'), 7000);
+    }
+
+    // 10. Scroll suave para o cartão de estatísticas
+    if (gcodeStatsCard) {
+      gcodeStatsCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // 11. Notificação Toast com atalho para abrir o Simulador 3D
+    const lineCount = cleanGCode.split('\n').length;
+    showCamToast(
+      reliefObjects.length > 0 
+        ? `✨ Relevo 3D gerado (${lineCount} linhas)! Clica para ver no Simulador 3D.`
+        : `✨ Trajectória gerada (${lineCount} linhas)! Clica para ver no Simulador 3D.`,
+      () => {
+        switchViewMode('3d');
+        startSimulationPlayback();
+      }
+    );
   } catch (err) {
     console.error("Erro na geração do G-code:", err);
     alert("Ocorreu um erro ao gerar o G-code. Por favor, verifica se todos os parâmetros numéricos estão corretos.");
+    if (btnGenerate) {
+      btnGenerate.innerText = "⚙️ Gerar Trajectória";
+      btnGenerate.style.opacity = "";
+      btnGenerate.style.background = "";
+    }
   }
 }
 
