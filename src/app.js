@@ -3011,13 +3011,21 @@ function generateGCode() {
     const lineCount = cleanGCode.split('\n').length;
     showCamToast(
       reliefObjects.length > 0 
-        ? `✨ Relevo 3D gerado (${lineCount} linhas)! Clica para ver no Simulador 3D.`
+        ? `✨ Relevo 3D gerado (${lineCount} linhas)! A abrir o Simulador 3D...`
         : `✨ Trajectória gerada (${lineCount} linhas)! Clica para ver no Simulador 3D.`,
       () => {
         switchViewMode('3d');
         startSimulationPlayback();
       }
     );
+
+    // 12. Se for relevo 3D, transição suave automática para o Simulador 3D Three.js
+    if (reliefObjects.length > 0) {
+      setTimeout(() => {
+        switchViewMode('3d');
+        startSimulationPlayback();
+      }, 400);
+    }
   } catch (err) {
     console.error("Erro na geração do G-code:", err);
     alert("Ocorreu um erro ao gerar o G-code. Por favor, verifica se todos os parâmetros numéricos estão corretos.");
@@ -4245,5 +4253,10 @@ function ungroupSelectedObject() {
   saveAppState();
 }
 
-// Iniciar quando o DOM estiver pronto
-document.addEventListener('DOMContentLoaded', init);
+// Iniciar imediatamente se o DOM já estiver pronto, ou aguardar DOMContentLoaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+
