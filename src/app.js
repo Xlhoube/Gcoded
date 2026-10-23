@@ -2447,6 +2447,19 @@ function generateGCode() {
       }
     }
 
+    // Validações de segurança para relevo 3D
+    if (reliefObjects.length > 0) {
+      for (const fabricImg of reliefObjects) {
+        const rs = fabricImg.reliefSettings;
+        const maxDepth = rs ? (rs.maxDepth || 2.0) : 2.0;
+        if (maxDepth > materialZ) {
+          gcodeOutputText.value = `❌ ERRO DE SEGURANÇA:\nA profundidade do relevo (${maxDepth.toFixed(1)} mm) excede a espessura do material (${materialZ} mm).\nAjusta a profundidade do relevo ou a espessura para evitar colisão e danos na mesa da máquina.`;
+          gcodeOutputText.style.color = "var(--danger)";
+          return;
+        }
+      }
+    }
+
     gcodeOutputText.style.color = "var(--success)";
 
     // 3. Montar Cabeçalho do G-code Limpo
@@ -2514,7 +2527,12 @@ function generateGCode() {
           const xSt = ltr ? toolDia : -toolDia;
           gcode.push(`G0 Z${safeZ.toFixed(3)}`);
           gcode.push(`G0 X${(objLeftMM + xs - wcsX).toFixed(3)} Y${(objTopMM + y - wcsY).toFixed(3)}`);
-          for (let x = xs; ltr ? x <= xe : x >= xe; x += xSt) {
+          
+          // Mergulho inicial controlado no primeiro ponto com feedZ
+          const zFirst = getReliefZ(xs, y);
+          gcode.push(`G1 Z${zFirst.toFixed(3)} F${feedZ.toFixed(0)}`);
+
+          for (let x = xs + xSt; ltr ? x <= xe : x >= xe; x += xSt) {
             const z = getReliefZ(x, y);
             gcode.push(`G1 X${(objLeftMM + x - wcsX).toFixed(3)} Y${(objTopMM + y - wcsY).toFixed(3)} Z${z.toFixed(3)} F${feedXY.toFixed(0)}`);
           }
@@ -2531,7 +2549,12 @@ function generateGCode() {
             const ySt = btt ? toolDia : -toolDia;
             gcode.push(`G0 Z${safeZ.toFixed(3)}`);
             gcode.push(`G0 X${(objLeftMM + x - wcsX).toFixed(3)} Y${(objTopMM + ys - wcsY).toFixed(3)}`);
-            for (let y = ys; btt ? y <= ye : y >= ye; y += ySt) {
+            
+            // Mergulho inicial controlado com feedZ
+            const zFirst = getReliefZ(x, ys);
+            gcode.push(`G1 Z${zFirst.toFixed(3)} F${feedZ.toFixed(0)}`);
+
+            for (let y = ys + ySt; btt ? y <= ye : y >= ye; y += ySt) {
               const z = getReliefZ(x, y);
               gcode.push(`G1 X${(objLeftMM + x - wcsX).toFixed(3)} Y${(objTopMM + y - wcsY).toFixed(3)} Z${z.toFixed(3)} F${feedXY.toFixed(0)}`);
             }
@@ -2546,90 +2569,112 @@ function generateGCode() {
 
     // 4. Processar Geometria de cada objecto de contorno no Canvas
     contourObjects.forEach((obj, idx) => {
-      let points = [];
+      // Um objecto pode gerar múltiplos subpercursos (ex: letras com buracos interiores ou SVG com múltiplos paths)
+      let subpaths = [];
 
       // --- CASO 1: RETÂNGULO ---
       if (obj.type === 'rect') {
-        // Local corners (no stroke) mapped to scene coords; independent of zoom/pan viewport
         const m = obj.calcTransformMatrix();
         const hw = obj.width / 2;
         const hh = obj.height / 2;
-        points = [
+        const pts = [
           { x: -hw, y: -hh }, { x: hw, y: -hh }, { x: hw, y: hh }, { x: -hw, y: hh }, { x: -hw, y: -hh }
         ].map(p => fabric.util.transformPoint(new fabric.Point(p.x, p.y), m));
+        subpaths.push(pts);
       }
       // --- CASO 2: CÍRCULO ---
       else if (obj.type === 'circle') {
         const center = obj.getCenterPoint();
         const radius = obj.radius * (obj.scaleX || 1);
         const steps = 64; // Aproximação por polígono de 64 lados
+        const pts = [];
         for (let i = 0; i <= steps; i++) {
           const theta = (i / steps) * 2 * Math.PI;
           const px = center.x + radius * Math.cos(theta);
           const py = center.y + radius * Math.sin(theta);
-          points.push({ x: px, y: py });
+          pts.push({ x: px, y: py });
         }
+        subpaths.push(pts);
       }
       // --- CASO 3: LINHA ---
       else if (obj.type === 'line') {
-        // Real endpoints (not bounding-box corners) mapped to scene coords
         const m = obj.calcTransformMatrix();
         const lp = obj.calcLinePoints();
-        points = [
+        const pts = [
           fabric.util.transformPoint(new fabric.Point(lp.x1, lp.y1), m),
           fabric.util.transformPoint(new fabric.Point(lp.x2, lp.y2), m)
         ];
+        subpaths.push(pts);
       }
       // --- CASO 4: CAMINHO / SVG / GRUPO ---
       else {
-        // Usar a API do browser para caminhar no SVG de forma extremamente precisa
         const svgNS = "http://www.w3.org/2000/svg";
         const tempSvg = document.createElementNS(svgNS, "svg");
-        const tempPath = document.createElementNS(svgNS, "path");
-        
-        let dString = "";
+        document.body.appendChild(tempSvg);
+
+        const dStrings = [];
         if (obj.type === 'path') {
-          dString = obj.path.map(cmd => cmd.join(' ')).join(' ');
+          // Separar subpaths em comandos 'M'/'m' distintos se existirem
+          const pathCommands = obj.path;
+          let currentD = [];
+          for (let c = 0; c < pathCommands.length; c++) {
+            const cmd = pathCommands[c];
+            if ((cmd[0] === 'M' || cmd[0] === 'm') && currentD.length > 0) {
+              dStrings.push(currentD.map(p => p.join(' ')).join(' '));
+              currentD = [];
+            }
+            currentD.push(cmd);
+          }
+          if (currentD.length > 0) {
+            dStrings.push(currentD.map(p => p.join(' ')).join(' '));
+          }
         } else {
-          // Se for um grupo (SVG complexo), extraímos o caminho serializando para SVG
+          // Se for grupo SVG, extrair todos os paths individuais
           const svgString = obj.toSVG();
           const parser = new DOMParser();
           const doc = parser.parseFromString(svgString, 'image/svg+xml');
           const paths = doc.querySelectorAll('path');
           paths.forEach(p => {
-            dString += " " + p.getAttribute('d');
+            const d = p.getAttribute('d');
+            if (d && d.trim()) dStrings.push(d.trim());
           });
         }
 
-        if (dString.trim()) {
-          tempPath.setAttribute('d', dString);
+        const matrix = obj.calcTransformMatrix();
+        dStrings.forEach(dStr => {
+          if (!dStr.trim()) return;
+          const tempPath = document.createElementNS(svgNS, "path");
+          tempPath.setAttribute('d', dStr);
           tempSvg.appendChild(tempPath);
-          document.body.appendChild(tempSvg);
-          
           try {
             const totalLength = tempPath.getTotalLength();
-            const stepSize = 2; // Resolução de amostragem de 1mm (2px)
-            const numPoints = Math.max(12, Math.ceil(totalLength / stepSize));
-            
-            const matrix = obj.calcTransformMatrix();
-            for (let i = 0; i <= numPoints; i++) {
-              const dist = (i / numPoints) * totalLength;
-              const pt = tempPath.getPointAtLength(dist);
-              // Transformar coordenadas locais do SVG em coordenadas globais do Canvas
-              const transformedPt = fabric.util.transformPoint({ x: pt.x, y: pt.y }, matrix);
-              points.push(transformedPt);
+            if (totalLength > 0.05) {
+              const stepSize = 2; // 1mm em px (ESCALA_MM_PX = 2)
+              const numPoints = Math.max(12, Math.ceil(totalLength / stepSize));
+              const pts = [];
+              for (let i = 0; i <= numPoints; i++) {
+                const dist = (i / numPoints) * totalLength;
+                const pt = tempPath.getPointAtLength(dist);
+                const transformedPt = fabric.util.transformPoint({ x: pt.x, y: pt.y }, matrix);
+                pts.push(transformedPt);
+              }
+              if (pts.length > 0) subpaths.push(pts);
             }
           } catch (e) {
-            console.warn("Erro ao ler caminhos SVG:", e);
+            console.warn("Erro ao ler subpath SVG:", e);
           } finally {
-            document.body.removeChild(tempSvg);
+            tempSvg.removeChild(tempPath);
           }
-        }
+        });
+
+        document.body.removeChild(tempSvg);
       }
 
-      // Se extraímos coordenadas com sucesso, gerar os comandos de corte
-      if (points.length > 0) {
-        // Converter pontos para milímetros em relação à Origem do Trabalho (WCS Zero na mesa)
+      // Processar cada subpath individualmente com retracção segura a Z seguro
+      subpaths.forEach(points => {
+        if (!points || points.length < 2) return;
+
+        // Converter pontos para mm em relação à Origem do Trabalho (WCS Zero na mesa)
         const wcsX = parseCAMParam(inputWcsX, 250);
         const wcsY = parseCAMParam(inputWcsY, 250);
         const mmPoints = points.map(pt => {
@@ -2641,7 +2686,6 @@ function generateGCode() {
           };
         });
 
-        // Guardar percurso para renderizar no canvas como simulação visual
         toolpathsToVisualise.push(points);
 
         // Calcular as passagens verticais de descida Z
@@ -2651,26 +2695,37 @@ function generateGCode() {
           zPasses.push(currentZ);
           currentZ -= depthPass;
         }
-        zPasses.push(depthTotal); // Garantir passagem na profundidade final
+        zPasses.push(depthTotal);
 
-        // Ponto Inicial da trajectória
+        // Verificar se o contorno é fechado (início == fim)
+        const isClosed = Math.hypot(mmPoints[0].x - mmPoints[mmPoints.length - 1].x,
+                                    mmPoints[0].y - mmPoints[mmPoints.length - 1].y) < 0.1;
+
+        // Deslocação rápida inicial para o ponto de arranque do subpath à altura segura
         const startPt = mmPoints[0];
+        gcode.push(`G0 Z${safeZ.toFixed(3)}`);
         gcode.push(`G0 X${startPt.x.toFixed(3)} Y${startPt.y.toFixed(3)}`);
-        
+
         // Executar percurso completo por camadas Z
         zPasses.forEach((zVal, pIdx) => {
-          // Mergulho vertical
+          // Se for contorno aberto e não for a primeira passagem, reposicionar em Z seguro antes de descer
+          if (!isClosed && pIdx > 0) {
+            gcode.push(`G0 Z${safeZ.toFixed(3)}`);
+            gcode.push(`G0 X${startPt.x.toFixed(3)} Y${startPt.y.toFixed(3)}`);
+          }
+
+          // Mergulho vertical à taxa de avanço Z
           gcode.push(`G1 Z${zVal.toFixed(3)} F${feedZ.toFixed(0)}`);
-          
-          // Cortar contorno em XY
+
+          // Corte em avanço XY
           for (let i = 1; i < mmPoints.length; i++) {
             gcode.push(`G1 X${mmPoints[i].x.toFixed(3)} Y${mmPoints[i].y.toFixed(3)} F${feedXY.toFixed(0)}`);
           }
         });
 
-        // Retorno para altura segura após concluir objecto
+        // Retracção de segurança no final de cada subpath
         gcode.push(`G0 Z${safeZ.toFixed(3)}`);
-      }
+      });
     });
 
     // 5. Rodapé Final do G-code

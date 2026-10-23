@@ -4,7 +4,7 @@
 - **Nome do Projecto:** Gcoded
 - **Objectivo:** Criar um gerador de percursos de corte (CAM/toolpath generator) interativo para máquinas CNC, a correr no browser de forma 100% local e offline-first. O utilizador poderá criar ou importar desenhos, configurar parâmetros da fresadora, gerar percursos e exportar o G-code. Todos os dados são guardados localmente no browser (`localStorage`) e através de exportação de ficheiros JSON.
 - **Data de Início:** 2026-08-21
-- **Versão Actual:** v0.4.1
+- **Versão Actual:** v0.4.2
 - **Nível de Risco:** 1 (Baixo - protótipo rápido, sem base de dados remota)
 - **Ambiente de Deploy:** Vercel (servido como site estático)
 
@@ -54,6 +54,9 @@
 - **[2026-10-23] | DECISÃO-011 | Correcção Crítica de Geometria CAM e Orientação de Relevo**
   - **Contexto:** A auditoria detectou que linhas diagonais saíam horizontais (`getCoords()` bounding box), retângulos distorciam com zoom/pan, relevo 3D ficava invertido no eixo Y (de pernas para o ar) e o modo luminância gerava mapas de profundidade planos por offset incorreto de canal alfa.
   - **Decisão:** Migração da extração de coordenadas para geometria local com `calcTransformMatrix()` e `calcLinePoints()`, inversão do eixo V no rastreio Z do relevo (`1 - y/h`) e correcção do índice do canal alfa (`i*4+3`). Validado via testes automatizados E2E.
+- **[2026-10-23] | DECISÃO-012 | Retracções de Segurança CAM e Protecção de Material em Relevo**
+  - **Contexto:** Subpaths de SVGs complexos (ex: ilhas/buracos) eram cortados continuamente sem levantar a fresa; contornos abertos em múltiplas passagens Z atravessavam a peça em G1 ao voltar ao início; e o relevo 3D não validava a profundidade contra a espessura do material e mergulhava à velocidade rápida XY.
+  - **Decisão:** Decomposição de caminhos em subpaths atómicos com retracção `G0 Z_safe` entre cada um; verificação de contorno aberto para reposicionar em altura segura antes de cada nova passagem Z; mergulho inicial em relevo com `feedZ`; e bloqueio preventivo de segurança se `maxDepth > materialZ`.
 
 ---
 
@@ -71,5 +74,6 @@
 - [x] Desenvolver Gestor de Biblioteca de Ferramentas (Tool Manager Modal) com importação/exportação JSON
 - [x] Desenvolver Motor de AI Deep Map & Grayscale Relief Carving com IA no browser
 - [x] Corrigir geometria de linhas diagonais, retângulos sob zoom/pan e orientação Y de relevo 3D
+- [x] Implementar retracção de segurança entre subpaths e reposicionamento Z em contornos abertos
 - [ ] Desenvolver estratégia de corte "Exterior (Profile)" com compensação de raio da fresa
 - [ ] Desenvolver estratégia de corte "Interior (Pocket)" para preenchimento de caixas
