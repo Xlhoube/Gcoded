@@ -107,22 +107,22 @@
           <div class="input-field">
             <label for="param-origin-type">Alinhamento na Mesa</label>
             <select id="param-origin-type">
-              <option value="bottom-left">Canto Inferior Esquerdo da Mesa</option>
+              <option value="bottom-left" selected>Canto Inferior Esquerdo da Mesa</option>
               <option value="top-left">Canto Superior Esquerdo da Mesa</option>
               <option value="top-right">Canto Superior Direito da Mesa</option>
               <option value="bottom-right">Canto Inferior Direito da Mesa</option>
-              <option value="center" selected>Centro da Mesa</option>
+              <option value="center">Centro da Mesa</option>
               <option value="custom">Offset Personalizado (G54)</option>
             </select>
           </div>
           <div class="input-grid" style="margin-top: 0.4rem;">
             <div class="input-field">
               <label for="param-wcs-x">Posição X (mm)</label>
-              <input type="number" id="param-wcs-x" value="250.0" step="5" min="0" max="2000">
+              <input type="number" id="param-wcs-x" value="0.0" step="5" min="0" max="2000" readonly style="opacity: 0.6;">
             </div>
             <div class="input-field">
               <label for="param-wcs-y">Posição Y (mm)</label>
-              <input type="number" id="param-wcs-y" value="250.0" step="5" min="0" max="2000">
+              <input type="number" id="param-wcs-y" value="0.0" step="5" min="0" max="2000" readonly style="opacity: 0.6;">
             </div>
           </div>
         </div>

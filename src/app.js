@@ -83,6 +83,7 @@ function init() {
   cacheUIElements();
   initCanvas();
   window.canvas = canvas;
+  updateTableSize();
   initToolLibrary(); // Inicializar biblioteca de ferramentas
   setupEventListeners();
   loadAppState();
@@ -1211,15 +1212,9 @@ function processImageToDepthMap(img, options) {
 
         let v = depthMap[i];
         if (cutPct > 0) {
-          if (v >= threshold) {
-            v = 1.0;
-          } else {
-            v = v / threshold;
+          if (distSq > 0.75) {
+            v = v * vignette;
           }
-        }
-        // Se estiver fora do foco central e houver corte de fundo, aplanar suavemente para Z=0
-        if (distSq > 0.75 && cutPct >= 0.1) {
-          v = 1.0 - (1.0 - v) * vignette;
         }
         depthMap[i] = Math.min(1, Math.max(0, v));
       }
@@ -1363,9 +1358,11 @@ function placeReliefImageOnCanvas() {
   const pxH = areaH * ESCALA_MM_PX;
 
   fabric.Image.fromURL(reliefImageEl.src, async (fabricImg) => {
+    const startLeft = 20;
+    const startTop = Math.max(20, canvas.height - pxH - 20);
     fabricImg.set({
-      left: 20,
-      top: 20,
+      left: startLeft,
+      top: startTop,
       scaleX: pxW / fabricImg.width,
       scaleY: pxH / fabricImg.height,
       originX: 'left',
@@ -2520,48 +2517,77 @@ function generateGCode() {
           return -(dm[py * dmW + px] * maxDepth);
         }
 
-        // Raster X
-        let lx = 0;
-        for (let y = 0; y <= objHeightMM; y += toolDia) {
-          const ltr = lx % 2 === 0;
-          const xs = ltr ? 0 : objWidthMM;
-          const xe = ltr ? objWidthMM : 0;
-          const xSt = ltr ? toolDia : -toolDia;
-          gcode.push(`G0 Z${safeZ.toFixed(3)}`);
-          gcode.push(`G0 X${(objLeftMM + xs - wcsX).toFixed(3)} Y${(objTopMM + y - wcsY).toFixed(3)}`);
-          
-          // Mergulho inicial controlado no primeiro ponto com feedZ
-          const zFirst = getReliefZ(xs, y);
-          gcode.push(`G1 Z${zFirst.toFixed(3)} F${feedZ.toFixed(0)}`);
+        // Resolução transversal em Y (stepover) e ao longo de X (stepX)
+        // Para relevo 3D de acabamento, o stepover transversal deve ser uma fracção do diâmetro (aprox. 35%)
+        const stepY = Math.max(0.2, toolDia * 0.35);
+        // Resolução ao longo de X: amostragem contínua fina proporcional à matriz de profundidade (0.25mm a 0.8mm)
+        const stepX = Math.max(0.25, Math.min(0.8, objWidthMM / Math.max(1, dmW)));
 
-          for (let x = xs + xSt; ltr ? x <= xe : x >= xe; x += xSt) {
-            const z = getReliefZ(x, y);
-            gcode.push(`G1 X${(objLeftMM + x - wcsX).toFixed(3)} Y${(objTopMM + y - wcsY).toFixed(3)} Z${z.toFixed(3)} F${feedXY.toFixed(0)}`);
+        // Posição de arranque segura
+        gcode.push(`G0 Z${safeZ.toFixed(3)}`);
+
+        // Padrão Zig-Zag contínuo sem retracções desnecessárias a meio da fresagem
+        let forward = true;
+        let currentY = 0;
+
+        const startX = 0;
+        const startY = 0;
+        const zInitial = getReliefZ(startX, startY);
+        gcode.push(`G0 X${(objLeftMM + startX - wcsX).toFixed(3)} Y${(objTopMM + startY - wcsY).toFixed(3)}`);
+        gcode.push(`G1 Z${zInitial.toFixed(3)} F${feedZ.toFixed(0)}`);
+
+        while (currentY <= objHeightMM) {
+          const xs = forward ? 0 : objWidthMM;
+          const xe = forward ? objWidthMM : 0;
+          const dx = forward ? stepX : -stepX;
+
+          for (let x = xs; forward ? x <= xe : x >= xe; x += dx) {
+            const z = getReliefZ(x, currentY);
+            gcode.push(`G1 X${(objLeftMM + x - wcsX).toFixed(3)} Y${(objTopMM + currentY - wcsY).toFixed(3)} Z${z.toFixed(3)} F${feedXY.toFixed(0)}`);
           }
-          lx++;
+
+          // Avanço suave em Y para a próxima linha sem levantar a fresa para Z_safe
+          currentY += stepY;
+          if (currentY <= objHeightMM) {
+            const zNext = getReliefZ(xe, currentY);
+            gcode.push(`G1 Y${(objTopMM + currentY - wcsY).toFixed(3)} Z${zNext.toFixed(3)} F${feedXY.toFixed(0)}`);
+            forward = !forward;
+          }
         }
 
-        // Raster Y (passe cruzado)
+        // Retracção de segurança no fim do passe em X
+        gcode.push(`G0 Z${safeZ.toFixed(3)}`);
+
+        // Raster Y (passe cruzado opcional)
         if (rs.doublePass) {
-          let ly = 0;
-          for (let x = 0; x <= objWidthMM; x += toolDia) {
-            const btt = ly % 2 === 0;
+          let btt = true;
+          let currentX = 0;
+          const stepXCross = Math.max(0.2, toolDia * 0.35);
+          const stepYCross = Math.max(0.25, Math.min(0.8, objHeightMM / Math.max(1, dmH)));
+
+          const zCrossInit = getReliefZ(0, 0);
+          gcode.push(`G0 X${(objLeftMM - wcsX).toFixed(3)} Y${(objTopMM - wcsY).toFixed(3)}`);
+          gcode.push(`G1 Z${zCrossInit.toFixed(3)} F${feedZ.toFixed(0)}`);
+
+          while (currentX <= objWidthMM) {
             const ys = btt ? 0 : objHeightMM;
             const ye = btt ? objHeightMM : 0;
-            const ySt = btt ? toolDia : -toolDia;
-            gcode.push(`G0 Z${safeZ.toFixed(3)}`);
-            gcode.push(`G0 X${(objLeftMM + x - wcsX).toFixed(3)} Y${(objTopMM + ys - wcsY).toFixed(3)}`);
-            
-            // Mergulho inicial controlado com feedZ
-            const zFirst = getReliefZ(x, ys);
-            gcode.push(`G1 Z${zFirst.toFixed(3)} F${feedZ.toFixed(0)}`);
+            const dy = btt ? stepYCross : -stepYCross;
 
-            for (let y = ys + ySt; btt ? y <= ye : y >= ye; y += ySt) {
-              const z = getReliefZ(x, y);
-              gcode.push(`G1 X${(objLeftMM + x - wcsX).toFixed(3)} Y${(objTopMM + y - wcsY).toFixed(3)} Z${z.toFixed(3)} F${feedXY.toFixed(0)}`);
+            for (let y = ys; btt ? y <= ye : y >= ye; y += dy) {
+              const z = getReliefZ(currentX, y);
+              gcode.push(`G1 X${(objLeftMM + currentX - wcsX).toFixed(3)} Y${(objTopMM + y - wcsY).toFixed(3)} Z${z.toFixed(3)} F${feedXY.toFixed(0)}`);
             }
-            ly++;
+
+            currentX += stepXCross;
+            if (currentX <= objWidthMM) {
+              const zCrossNext = getReliefZ(currentX, ye);
+              gcode.push(`G1 X${(objLeftMM + currentX - wcsX).toFixed(3)} Z${zCrossNext.toFixed(3)} F${feedXY.toFixed(0)}`);
+              btt = !btt;
+            }
           }
+
+          gcode.push(`G0 Z${safeZ.toFixed(3)}`);
         }
       });
     }
