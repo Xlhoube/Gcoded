@@ -1178,7 +1178,7 @@ function processImageToDepthMap(img, options) {
       const B = pixels[i * 4 + 2];
       const L = Math.round(0.299 * R + 0.587 * G + 0.114 * B);
       grey[i * 4] = grey[i * 4 + 1] = grey[i * 4 + 2] = L;
-      grey[i * 4] = 255;
+      grey[i * 4 + 3] = 255;
     }
 
     const blurred = blur > 0 ? applyBoxBlur(grey, finalW, finalH, blur) : grey;
@@ -2498,7 +2498,8 @@ function generateGCode() {
         function getReliefZ(xMM, yMM) {
           if (!dm || !dmW || !dmH) return 0;
           const u = Math.min(1, Math.max(0, xMM / objWidthMM));
-          const v = Math.min(1, Math.max(0, yMM / objHeightMM));
+          // yMM grows bottom-up (machine Y) while depth map row 0 is the image top
+          const v = 1 - Math.min(1, Math.max(0, yMM / objHeightMM));
           const px = Math.min(dmW - 1, Math.max(0, Math.round(u * (dmW - 1))));
           const py = Math.min(dmH - 1, Math.max(0, Math.round(v * (dmH - 1))));
           return -(dm[py * dmW + px] * maxDepth);
@@ -2549,14 +2550,13 @@ function generateGCode() {
 
       // --- CASO 1: RETÂNGULO ---
       if (obj.type === 'rect') {
-        const coords = obj.getCoords(); // tl, tr, br, bl
+        // Local corners (no stroke) mapped to scene coords; independent of zoom/pan viewport
+        const m = obj.calcTransformMatrix();
+        const hw = obj.width / 2;
+        const hh = obj.height / 2;
         points = [
-          { x: coords[0].x, y: coords[0].y },
-          { x: coords[1].x, y: coords[1].y },
-          { x: coords[2].x, y: coords[2].y },
-          { x: coords[3].x, y: coords[3].y },
-          { x: coords[0].x, y: coords[0].y } // Fechar loop
-        ];
+          { x: -hw, y: -hh }, { x: hw, y: -hh }, { x: hw, y: hh }, { x: -hw, y: hh }, { x: -hw, y: -hh }
+        ].map(p => fabric.util.transformPoint(new fabric.Point(p.x, p.y), m));
       }
       // --- CASO 2: CÍRCULO ---
       else if (obj.type === 'circle') {
@@ -2572,10 +2572,12 @@ function generateGCode() {
       }
       // --- CASO 3: LINHA ---
       else if (obj.type === 'line') {
-        const coords = obj.getCoords();
+        // Real endpoints (not bounding-box corners) mapped to scene coords
+        const m = obj.calcTransformMatrix();
+        const lp = obj.calcLinePoints();
         points = [
-          { x: coords[0].x, y: coords[0].y },
-          { x: coords[1].x, y: coords[1].y }
+          fabric.util.transformPoint(new fabric.Point(lp.x1, lp.y1), m),
+          fabric.util.transformPoint(new fabric.Point(lp.x2, lp.y2), m)
         ];
       }
       // --- CASO 4: CAMINHO / SVG / GRUPO ---
