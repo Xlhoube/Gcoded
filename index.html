@@ -268,11 +268,12 @@
         <div class="panel-section">
           <h2>Estratégia & Interpolação</h2>
           <div class="input-field">
-            <label for="param-strategy">Alinhamento de Corte</label>
+            <label for="param-strategy">Estratégia & Compensação de Raio</label>
             <select id="param-strategy">
+              <option value="outside" selected>Exterior (Perfil / Profile) - Compensação +R</option>
+              <option value="inside">Interior (Perfil / Furo) - Compensação -R</option>
+              <option value="pocket">Caixa / Pocket (Desbaste Concêntrico)</option>
               <option value="on">Sobre a Linha (Gravação / Engrave)</option>
-              <option value="inside" disabled>Interior (Caixa / Pocket) - Brevemente</option>
-              <option value="outside" disabled>Exterior (Perfil / Profile) - Brevemente</option>
             </select>
           </div>
           <div class="checkbox-field" style="margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
@@ -289,13 +290,15 @@
             <div class="checkbox-field" style="display: flex; align-items: center; gap: 0.4rem;">
               <input type="checkbox" id="param-use-tabs"
                 style="accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;">
-              <label for="param-use-tabs" style="font-size: 0.8rem; cursor: pointer; color: #38bdf8; font-weight: 600;">Ativar</label>
+              <label for="param-use-tabs"
+                style="font-size: 0.8rem; cursor: pointer; color: #38bdf8; font-weight: 600;">Ativar</label>
             </div>
           </div>
           <p style="font-size: 0.75rem; color: #94a3b8; margin: 0 0 0.6rem 0;">
             Mantém pontes sólidas na última passagem para impedir que a peça cortada se solte da chapa.
           </p>
-          <div id="tabs-settings-grid" class="input-grid" style="opacity: 0.45; pointer-events: none; transition: opacity 0.2s ease;">
+          <div id="tabs-settings-grid" class="input-grid"
+            style="opacity: 0.45; pointer-events: none; transition: opacity 0.2s ease;">
             <div class="input-field">
               <label for="param-tab-count">Quantidade</label>
               <input type="number" id="param-tab-count" value="4" min="1" max="20" step="1">
@@ -642,7 +645,7 @@
     <button id="cam-toast-action" class="cam-toast-btn">👁️ Abrir Simulador 3D</button>
   </div>
 
-  <script type="module" src="./src/app.js?v=0.7.0"></script>
+  <script type="module" src="./src/app.js?v=0.8.0"></script>
 </body>
 
 </html>

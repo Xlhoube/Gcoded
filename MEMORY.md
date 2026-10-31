@@ -4,7 +4,7 @@
 - **Nome do Projecto:** Gcoded
 - **Objectivo:** Criar um gerador de percursos de corte (CAM/toolpath generator) interativo para máquinas CNC, a correr no browser de forma 100% local e offline-first. O utilizador poderá criar ou importar desenhos, configurar parâmetros da fresadora, gerar percursos e exportar o G-code. Todos os dados são guardados localmente no browser (`localStorage`) e através de exportação de ficheiros JSON.
 - **Data de Início:** 2026-08-21
-- **Versão Actual:** v0.7.0
+- **Versão Actual:** v0.8.0
 - **Nível de Risco:** 1 (Baixo - protótipo rápido, sem base de dados remota)
 - **Ambiente de Deploy:** Vercel (servido como site estático)
 
@@ -97,6 +97,17 @@
     2. Desenvolvido motor de amostragem `generateContourWithTabs` que divide o perímetro em intervalos uniformes e calcula waypoints com elevação automática a `Z_tab = depthTotal + tabHeight` exclusivamente nas passagens inferiores onde a peça ficaria solta.
     3. Geração de percurso G-code com elevações verticais suaves `(Subida Aba)` e mergulhos `(Descida Corte)`, visualizadas automaticamente em 3D WebGL no Three.js.
     4. Forçado incremento de versão para `v0.7.0` com persistência completa em `localStorage`.
+- **[2026-10-31] | DECISÃO-020 | Estratégias CAM de Compensação de Raio: Profile Exterior, Profile Interior e Pocketing Concêntrico (Passo 3/3 REA)**
+  - **Contexto:** Peças cortadas pelo centro da linha saíam menores do que o desenhado em virtude do diâmetro da fresa, e não existia suporte para esvaziar cavidades/caixas (pocketing). Inspirado na matemática de insets/offsets do Layerling (`cadSketchInset.ts`).
+  - **Decisão:**
+    1. Desenvolvido algoritmo geométrico 2D `offsetContour` com cálculo de normais por vértice e vector bissectriz com limite de miter seguro (evitando espigões em cantos agudos).
+    2. Implementadas 4 estratégias no selector `param-strategy`:
+       - **Exterior (Profile):** Desfasamento $+R$ para fora, garantindo que o perímetro exterior da peça final tem as medidas mecânicas exactas.
+       - **Interior (Profile):** Desfasamento $-R$ para dentro, garantindo que furos e janelas saem nas dimensões nominais.
+       - **Caixa / Pocket:** Desbaste concêntrico contínuo gerado por `generatePocketToolpaths` com passo lateral paramétrico (*stepover* %).
+       - **Sobre a Linha:** Corte directo sem compensação para gravações e entalhes.
+    3. Suporte completo para arcos nativos circulares G2/G3 com raio compensado e renderização 2D exacta das linhas de desvio no canvas.
+    4. Forçado incremento de versão para `v0.8.0` com persistência no `localStorage`.
 
 ---
 
@@ -122,6 +133,6 @@
 - [x] Reformulação da barra lateral e biblioteca exclusivamente para Fresas e Routers CNC
 - [x] Importador Nativo de DXF com costura automática de segmentos e Drag & Drop na mesa CNC (Passo 1/3)
 - [x] Sistema de Abas de Fixação / Holding Tabs para corte passante CNC (Passo 2/3)
-- [ ] Desenvolver estratégia de corte "Exterior (Profile)" com compensação de raio da fresa (Passo 3/3)
-- [ ] Desenvolver estratégia de corte "Interior (Pocket)" para preenchimento de caixas (Passo 3/3)
+- [x] Desenvolver estratégia de corte "Exterior (Profile)" com compensação de raio da fresa (Passo 3/3)
+- [x] Desenvolver estratégia de corte "Interior (Pocket)" para preenchimento de caixas (Passo 3/3)
 

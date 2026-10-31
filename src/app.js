@@ -2859,6 +2859,120 @@ function vectorizeSelectedImage() {
 }
 
 /**
+ * Calcula a área com sinal de um polígono (Shoelace Formula)
+ * Determina a orientação: > 0 é Anti-horário (CCW), < 0 é Horário (CW)
+ */
+function signedArea(pts) {
+  let a = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    a += (pts[i].x * pts[i + 1].y) - (pts[i + 1].x * pts[i].y);
+  }
+  return a / 2;
+}
+
+/**
+ * Desfasamento Geométrico 2D com Bissectriz e Limite de Miter (Offset Poligonal)
+ * delta > 0: Exterior (alarga) | delta < 0: Interior (encolhe)
+ */
+function offsetContour(points, delta) {
+  if (!points || points.length < 3) return points;
+  if (Math.abs(delta) < 1e-4) return points;
+
+  const isClosed = Math.hypot(points[0].x - points[points.length - 1].x,
+                              points[0].y - points[points.length - 1].y) < 1e-3;
+  const loop = isClosed ? points.slice(0, -1) : points.slice();
+  const n = loop.length;
+  if (n < 3) return points;
+
+  const area = signedArea(points);
+  const dSign = area >= 0 ? delta : -delta;
+
+  const normals = [];
+  for (let i = 0; i < n; i++) {
+    const next = (i + 1) % n;
+    const dx = loop[next].x - loop[i].x;
+    const dy = loop[next].y - loop[i].y;
+    const len = Math.hypot(dx, dy) || 1;
+    normals.push({ x: dy / len, y: -dx / len });
+  }
+
+  const offsetLoop = [];
+  const miterLimit = 2.5;
+
+  for (let i = 0; i < n; i++) {
+    const prev = (i - 1 + n) % n;
+    const n1 = normals[prev];
+    const n2 = normals[i];
+
+    const bx = n1.x + n2.x;
+    const by = n1.y + n2.y;
+    const blen = Math.hypot(bx, by);
+
+    if (blen < 1e-6) {
+      offsetLoop.push({
+        x: loop[i].x + n2.x * dSign,
+        y: loop[i].y + n2.y * dSign
+      });
+      continue;
+    }
+
+    const ubx = bx / blen;
+    const uby = by / blen;
+
+    const cosHalf = n1.x * ubx + n1.y * uby;
+    if (Math.abs(cosHalf) < 1e-4) {
+      offsetLoop.push({
+        x: loop[i].x + n2.x * dSign,
+        y: loop[i].y + n2.y * dSign
+      });
+      continue;
+    }
+
+    let miterDist = dSign / cosHalf;
+    if (Math.abs(miterDist / dSign) > miterLimit) {
+      miterDist = Math.sign(miterDist) * Math.abs(dSign) * miterLimit;
+    }
+
+    offsetLoop.push({
+      x: loop[i].x + ubx * miterDist,
+      y: loop[i].y + uby * miterDist
+    });
+  }
+
+  if (isClosed) {
+    offsetLoop.push({ ...offsetLoop[0] });
+  }
+  return offsetLoop;
+}
+
+/**
+ * Gera percursos concêntricos de limpeza de caixa (Pocketing)
+ */
+function generatePocketToolpaths(points, toolDia, stepoverPercent = 40) {
+  const toolRadius = toolDia / 2;
+  const step = Math.max(0.1, toolDia * (stepoverPercent / 100));
+  const toolpaths = [];
+
+  let currentOffset = -toolRadius;
+  let prevArea = Math.abs(signedArea(points));
+
+  for (let pass = 0; pass < 100; pass++) {
+    const loop = offsetContour(points, currentOffset);
+    const newArea = Math.abs(signedArea(loop));
+
+    if (newArea <= 0.5 || newArea >= prevArea) {
+      break;
+    }
+
+    toolpaths.push(loop);
+    prevArea = newArea;
+    currentOffset -= step;
+  }
+
+  return toolpaths;
+}
+
+/**
  * Calcula e interpola os waypoints de subida e descida para Abas de Fixação (Holding Tabs)
  * Baseado no modelo determinístico de pontes do Layerling (stencilBridges.ts)
  */
@@ -3014,6 +3128,9 @@ function generateGCode() {
     const tabCount = paramTabCount ? (parseInt(paramTabCount.value, 10) || 4) : 4;
     const tabWidth = paramTabWidth ? (parseFloat(paramTabWidth.value) || 5.0) : 5.0;
     const tabHeight = paramTabHeight ? (parseFloat(paramTabHeight.value) || 1.5) : 1.5;
+    const strategy = selectStrategy ? selectStrategy.value : 'outside';
+    const toolRadius = toolDia / 2;
+    const stepover = inputStepover ? (parseFloat(inputStepover.value) || 40) : 40;
 
     // Validações apenas para contornos (não se aplicam ao relevo)
     if (contourObjects.length > 0) {
@@ -3332,24 +3449,38 @@ function generateGCode() {
         document.body.removeChild(tempSvg);
       }
 
-      // Processar cada subpath individualmente com retracção segura a Z seguro
+      // Processar cada subpath aplicando a Estratégia CAM (Exterior, Interior ou Pocket)
       subpaths.forEach(subItem => {
-        // Se for arco nativo circular G2 (Interpolação de Alta Suavidade)
-        if (subItem && subItem.isArcCircle && !useTabs) {
-          const { center, radius, visualPoints } = subItem;
-          toolpathsToVisualise.push(visualPoints);
+        const wcsX = parseCAMParam(inputWcsX, 250);
+        const wcsY = parseCAMParam(inputWcsY, 250);
 
-          const wcsX = parseCAMParam(inputWcsX, 250);
-          const wcsY = parseCAMParam(inputWcsY, 250);
+        // 1. CÍRCULO COM ARCOS NATIVOS G2 (quando tabs não estão ativos e não é pocket)
+        if (subItem && subItem.isArcCircle && !useTabs && strategy !== 'pocket') {
+          const { center, radius } = subItem;
 
           const cxMM = (center.x / ESCALA_MM_PX) - wcsX;
           const cyMM = ((canvas.height - center.y) / ESCALA_MM_PX) - wcsY;
-          const rMM = radius / ESCALA_MM_PX;
+          const rBaseMM = radius / ESCALA_MM_PX;
 
-          const startX = cxMM - rMM;
+          // Compensação de raio no círculo
+          let rCut = rBaseMM;
+          if (strategy === 'outside') rCut = rBaseMM + toolRadius;
+          else if (strategy === 'inside') rCut = Math.max(0.1, rBaseMM - toolRadius);
+
+          // Amostragem para renderização visual no canvas 2D
+          const visPts = [];
+          for (let i = 0; i <= 64; i++) {
+            const theta = (i / 64) * 2 * Math.PI;
+            visPts.push({
+              x: (cxMM + rCut * Math.cos(theta) + wcsX) * ESCALA_MM_PX,
+              y: canvas.height - ((cyMM + rCut * Math.sin(theta) + wcsY) * ESCALA_MM_PX)
+            });
+          }
+          toolpathsToVisualise.push(visPts);
+
+          const startX = cxMM - rCut;
           const startY = cyMM;
 
-          // Calcular as passagens verticais de descida Z
           const zPasses = [];
           let currentZ = -depthPass;
           while (currentZ > depthTotal) {
@@ -3358,44 +3489,58 @@ function generateGCode() {
           }
           zPasses.push(depthTotal);
 
-          // Deslocação rápida inicial para o início do arco à altura segura
           gcode.push(`G0 Z${safeZ.toFixed(3)}`);
           gcode.push(`G0 X${startX.toFixed(3)} Y${startY.toFixed(3)}`);
 
-          // Executar corte circular com comandos G2 em 2 semi-arcos perfeitos de 180°
           zPasses.forEach((zVal) => {
-            // Mergulho vertical à taxa de avanço Z
             gcode.push(`G1 Z${zVal.toFixed(3)} F${feedZ.toFixed(0)}`);
-
-            // Arco superior 180° (sentido horário): de (cx - r, cy) até (cx + r, cy), centro relativo em I = r, J = 0
-            gcode.push(`G2 X${(cxMM + rMM).toFixed(3)} Y${cyMM.toFixed(3)} I${rMM.toFixed(3)} J0.000 F${feedXY.toFixed(0)}`);
-            // Arco inferior 180° (sentido horário): de (cx + r, cy) até (cx - r, cy), centro relativo em I = -r, J = 0
-            gcode.push(`G2 X${(cxMM - rMM).toFixed(3)} Y${cyMM.toFixed(3)} I${(-rMM).toFixed(3)} J0.000 F${feedXY.toFixed(0)}`);
+            gcode.push(`G2 X${(cxMM + rCut).toFixed(3)} Y${cyMM.toFixed(3)} I${rCut.toFixed(3)} J0.000 F${feedXY.toFixed(0)}`);
+            gcode.push(`G2 X${(cxMM - rCut).toFixed(3)} Y${cyMM.toFixed(3)} I${(-rCut).toFixed(3)} J0.000 F${feedXY.toFixed(0)}`);
           });
 
-          // Retracção de segurança
           gcode.push(`G0 Z${safeZ.toFixed(3)}`);
           return;
         }
 
-        const points = subItem;
-        if (!points || points.length < 2) return;
+        // 2. CONTORNOS POLIGONAIS, RETÂNGULOS, DXF E SVGs
+        const rawPoints = (subItem && subItem.isArcCircle) ? subItem.visualPoints : subItem;
+        if (!rawPoints || rawPoints.length < 2) return;
 
-        // Converter pontos para mm em relação à Origem do Trabalho (WCS Zero na mesa)
-        const wcsX = parseCAMParam(inputWcsX, 250);
-        const wcsY = parseCAMParam(inputWcsY, 250);
-        const mmPoints = points.map(pt => {
-          const mesaX = pt.x / ESCALA_MM_PX;
-          const mesaY = (canvas.height - pt.y) / ESCALA_MM_PX;
-          return {
-            x: mesaX - wcsX,
-            y: mesaY - wcsY
-          };
+        // Converter pontos em coordenadas físicas de maquinação (mm)
+        const mmPoints = rawPoints.map(pt => ({
+          x: (pt.x / ESCALA_MM_PX) - wcsX,
+          y: ((canvas.height - pt.y) / ESCALA_MM_PX) - wcsY
+        }));
+
+        const isClosed = Math.hypot(mmPoints[0].x - mmPoints[mmPoints.length - 1].x,
+                                    mmPoints[0].y - mmPoints[mmPoints.length - 1].y) < 0.1;
+
+        // Gerar os laços de corte (loops) consoante a estratégia seleccionada
+        let loopsToCut = [];
+        if (!isClosed || strategy === 'on') {
+          loopsToCut = [mmPoints];
+        } else if (strategy === 'outside') {
+          // Compensação Exterior (+R): peça final fica com dimensão exacta
+          loopsToCut = [offsetContour(mmPoints, toolRadius)];
+        } else if (strategy === 'inside') {
+          // Compensação Interior (-R): cavidade/furo fica com dimensão exacta
+          loopsToCut = [offsetContour(mmPoints, -toolRadius)];
+        } else if (strategy === 'pocket') {
+          // Desbaste Concêntrico Total de Caixa
+          loopsToCut = generatePocketToolpaths(mmPoints, toolDia, stepover);
+          if (loopsToCut.length === 0) loopsToCut = [mmPoints];
+        }
+
+        // Visualização 2D no Canvas com os percursos compensados reais
+        loopsToCut.forEach(loop => {
+          const vis = loop.map(p => ({
+            x: (p.x + wcsX) * ESCALA_MM_PX,
+            y: canvas.height - ((p.y + wcsY) * ESCALA_MM_PX)
+          }));
+          toolpathsToVisualise.push(vis);
         });
 
-        toolpathsToVisualise.push(points);
-
-        // Calcular as passagens verticais de descida Z
+        // Passagens verticais de descida Z
         const zPasses = [];
         let currentZ = -depthPass;
         while (currentZ > depthTotal) {
@@ -3404,54 +3549,51 @@ function generateGCode() {
         }
         zPasses.push(depthTotal);
 
-        // Verificar se o contorno é fechado (início == fim)
-        const isClosed = Math.hypot(mmPoints[0].x - mmPoints[mmPoints.length - 1].x,
-                                    mmPoints[0].y - mmPoints[mmPoints.length - 1].y) < 0.1;
+        // Executar corte para cada laço gerado
+        loopsToCut.forEach((loop) => {
+          if (!loop || loop.length < 2) return;
+          const startPt = loop[0];
 
-        // Deslocação rápida inicial para o ponto de arranque do subpath à altura segura
-        const startPt = mmPoints[0];
-        gcode.push(`G0 Z${safeZ.toFixed(3)}`);
-        gcode.push(`G0 X${startPt.x.toFixed(3)} Y${startPt.y.toFixed(3)}`);
+          gcode.push(`G0 Z${safeZ.toFixed(3)}`);
+          gcode.push(`G0 X${startPt.x.toFixed(3)} Y${startPt.y.toFixed(3)}`);
 
-        // Executar percurso completo por camadas Z (com suporte a Holding Tabs)
-        zPasses.forEach((zVal, pIdx) => {
-          // Se for contorno aberto e não for a primeira passagem, reposicionar em Z seguro antes de descer
-          if (!isClosed && pIdx > 0) {
-            gcode.push(`G0 Z${safeZ.toFixed(3)}`);
-            gcode.push(`G0 X${startPt.x.toFixed(3)} Y${startPt.y.toFixed(3)}`);
-          }
-
-          const isBottomPass = (zVal <= depthTotal + tabHeight);
-          const waypoints = (useTabs && isClosed && isBottomPass)
-            ? generateContourWithTabs(mmPoints, { enabled: true, count: tabCount, width: tabWidth, height: tabHeight }, zVal, depthTotal)
-            : mmPoints.map(p => ({ x: p.x, y: p.y, z: zVal }));
-
-          // Mergulho vertical inicial
-          gcode.push(`G1 Z${waypoints[0].z.toFixed(3)} F${feedZ.toFixed(0)}`);
-
-          // Corte em avanço XY com rampas verticais para abas de fixação
-          for (let i = 1; i < waypoints.length; i++) {
-            const prev = waypoints[i - 1];
-            const curr = waypoints[i];
-
-            if (Math.abs(curr.z - prev.z) > 1e-4) {
-              if (curr.z > prev.z) {
-                // Subida para a ponte
-                gcode.push(`G1 Z${curr.z.toFixed(3)} F${feedZ.toFixed(0)} (Subida Aba)`);
-                gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)}`);
-              } else {
-                // Concluir topo da aba e mergulhar de volta ao corte
-                gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)}`);
-                gcode.push(`G1 Z${curr.z.toFixed(3)} F${feedZ.toFixed(0)} (Descida Corte)`);
-              }
-            } else {
-              gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)}`);
+          zPasses.forEach((zVal, pIdx) => {
+            if (!isClosed && pIdx > 0) {
+              gcode.push(`G0 Z${safeZ.toFixed(3)}`);
+              gcode.push(`G0 X${startPt.x.toFixed(3)} Y${startPt.y.toFixed(3)}`);
             }
-          }
-        });
 
-        // Retracção de segurança no final de cada subpath
-        gcode.push(`G0 Z${safeZ.toFixed(3)}`);
+            const isBottomPass = (zVal <= depthTotal + tabHeight);
+            // Aplicar Holding Tabs apenas no contorno exterior ou sobre a linha
+            const shouldApplyTabs = useTabs && isClosed && isBottomPass && (strategy === 'outside' || strategy === 'on');
+            const waypoints = shouldApplyTabs
+              ? generateContourWithTabs(loop, { enabled: true, count: tabCount, width: tabWidth, height: tabHeight }, zVal, depthTotal)
+              : loop.map(p => ({ x: p.x, y: p.y, z: zVal }));
+
+            // Mergulho vertical à taxa de avanço Z
+            gcode.push(`G1 Z${waypoints[0].z.toFixed(3)} F${feedZ.toFixed(0)}`);
+
+            // Corte em avanço XY
+            for (let i = 1; i < waypoints.length; i++) {
+              const prev = waypoints[i - 1];
+              const curr = waypoints[i];
+
+              if (Math.abs(curr.z - prev.z) > 1e-4) {
+                if (curr.z > prev.z) {
+                  gcode.push(`G1 Z${curr.z.toFixed(3)} F${feedZ.toFixed(0)} (Subida Aba)`);
+                  gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)}`);
+                } else {
+                  gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)}`);
+                  gcode.push(`G1 Z${curr.z.toFixed(3)} F${feedZ.toFixed(0)} (Descida Corte)`);
+                }
+              } else {
+                gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)}`);
+              }
+            }
+          });
+
+          gcode.push(`G0 Z${safeZ.toFixed(3)}`);
+        });
       });
     });
 
