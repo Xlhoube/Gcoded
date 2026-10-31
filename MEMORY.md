@@ -4,7 +4,7 @@
 - **Nome do Projecto:** Gcoded
 - **Objectivo:** Criar um gerador de percursos de corte (CAM/toolpath generator) interativo para máquinas CNC, a correr no browser de forma 100% local e offline-first. O utilizador poderá criar ou importar desenhos, configurar parâmetros da fresadora, gerar percursos e exportar o G-code. Todos os dados são guardados localmente no browser (`localStorage`) e através de exportação de ficheiros JSON.
 - **Data de Início:** 2026-08-21
-- **Versão Actual:** v0.8.0
+- **Versão Actual:** v0.8.1
 - **Nível de Risco:** 1 (Baixo - protótipo rápido, sem base de dados remota)
 - **Ambiente de Deploy:** Vercel (servido como site estático)
 
@@ -108,6 +108,14 @@
        - **Sobre a Linha:** Corte directo sem compensação para gravações e entalhes.
     3. Suporte completo para arcos nativos circulares G2/G3 com raio compensado e renderização 2D exacta das linhas de desvio no canvas.
     4. Forçado incremento de versão para `v0.8.0` com persistência no `localStorage`.
+- **[2026-10-31] | DECISÃO-021 | Caixa Modal de Importação com Dica de Engenharia para Vetores Puros (π, SVG e DXF)**
+  - **Contexto:** O utilizador pretendia esclarecimento sobre a preparação de símbolos mecânicos/matemáticos (ex: π) para maquinação CNC e solicitou a inclusão explícita de uma Dica de Engenharia na caixa de importação de ficheiros, destacando as vantagens de formatos vetoriais puros (SVG ou DXF nativo) sobre imagens raster.
+  - **Decisão:**
+    1. Criada caixa modal dedicada de importação de ficheiros (`#import-modal`), ativada pelo botão principal "📥 Importar" e com suporte a atalho de teclado `Escape` e fecho por clique exterior.
+    2. Incorporada zona de arrasto e largada (*Dropzone*) visual com badges de formatos aceites (.dxf, .svg, .png, .jpg, .jpeg) e botão direto "📂 Procurar Ficheiro".
+    3. Integrado cartão de destaque *glassmorphism* com a **Dica de Engenharia**: *"Se tiveres o desenho do π em formato vetorial puro (SVG ou o recém-implementado DXF), podes importá-lo diretamente sem precisar de vetorizar, garantindo curvas e arcos matematicamente perfeitos!"*.
+    4. Ao selecionar ou largar um ficheiro na caixa, a modal fecha automaticamente e o desenho é importado diretamente para a mesa de corte CNC com notificação de confirmação.
+    5. Incremento de versão para `v0.8.1` com cache-busting atualizado.
 
 ---
 
@@ -135,4 +143,5 @@
 - [x] Sistema de Abas de Fixação / Holding Tabs para corte passante CNC (Passo 2/3)
 - [x] Desenvolver estratégia de corte "Exterior (Profile)" com compensação de raio da fresa (Passo 3/3)
 - [x] Desenvolver estratégia de corte "Interior (Pocket)" para preenchimento de caixas (Passo 3/3)
+- [x] Caixa de Importação de Ficheiros com Dropzone e Dica de Engenharia para Vetores Puros (π, SVG e DXF)
 

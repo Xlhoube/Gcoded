@@ -22,7 +22,7 @@ let lastPosY = 0;
 
 // Elementos da UI
 let toolSelectBtn, toolRectBtn, toolCircleBtn, toolLineBtn;
-let btnImportTrigger, fileImport, btnVectorize;
+let btnImportTrigger, fileImport, btnVectorize, importModal, btnCloseImport, btnCloseImportFooter, importDropzone, btnBrowseFile;
 let btnDelete, btnClear, btnCopy;
 let canvasCoordsSpan, gcodeOutputText;
 let btnGenerate, btnDownload;
@@ -124,6 +124,11 @@ function cacheUIElements() {
   btnImportTrigger = document.getElementById('btn-import-trigger');
   fileImport = document.getElementById('file-import');
   btnVectorize = document.getElementById('btn-vectorize');
+  importModal = document.getElementById('import-modal');
+  btnCloseImport = document.getElementById('btn-close-import');
+  btnCloseImportFooter = document.getElementById('btn-close-import-footer');
+  importDropzone = document.getElementById('import-dropzone');
+  btnBrowseFile = document.getElementById('btn-browse-file');
   
   btnDelete = document.getElementById('btn-delete');
   btnClear = document.getElementById('btn-clear');
@@ -1550,8 +1555,64 @@ function setupEventListeners() {
   btnDelete.addEventListener('click', deleteSelectedObject);
   btnClear.addEventListener('click', clearCanvas);
 
-  // Importação (DXF, SVG, PNG, JPG) e Tracing
-  btnImportTrigger.addEventListener('click', () => fileImport.click());
+  // Importação (DXF, SVG, PNG, JPG) e Caixa de Importação / Drop
+  if (btnImportTrigger && importModal) {
+    btnImportTrigger.addEventListener('click', () => {
+      importModal.style.display = 'flex';
+    });
+  } else if (btnImportTrigger) {
+    btnImportTrigger.addEventListener('click', () => fileImport.click());
+  }
+
+  const closeImportModal = () => {
+    if (importModal) importModal.style.display = 'none';
+  };
+
+  if (btnCloseImport) btnCloseImport.addEventListener('click', closeImportModal);
+  if (btnCloseImportFooter) btnCloseImportFooter.addEventListener('click', closeImportModal);
+
+  if (importModal) {
+    importModal.addEventListener('click', (e) => {
+      if (e.target === importModal) closeImportModal();
+    });
+  }
+
+  if (btnBrowseFile) {
+    btnBrowseFile.addEventListener('click', () => fileImport.click());
+  }
+
+  if (importDropzone) {
+    importDropzone.addEventListener('click', () => fileImport.click());
+
+    importDropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      importDropzone.classList.add('dragover');
+    });
+
+    importDropzone.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      importDropzone.classList.remove('dragover');
+    });
+
+    importDropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      importDropzone.classList.remove('dragover');
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+        closeImportModal();
+        processImportedFile(e.dataTransfer.files[0]);
+      }
+    });
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && importModal && importModal.style.display === 'flex') {
+      closeImportModal();
+    }
+  });
+
   fileImport.addEventListener('change', handleFileImport);
   btnVectorize.addEventListener('click', vectorizeSelectedImage);
 
@@ -2796,6 +2857,7 @@ function processImportedFile(file) {
  */
 function handleFileImport(e) {
   const file = e.target.files[0];
+  if (importModal) importModal.style.display = 'none';
   if (file) processImportedFile(file);
   e.target.value = '';
 }
