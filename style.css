@@ -188,6 +188,13 @@ button.disabled, button:disabled {
   background: #0b0e14;
   position: relative;
   overflow: hidden;
+  transition: outline 0.2s ease, background-color 0.2s ease;
+}
+
+#canvas-area.drop-active {
+  outline: 2px dashed #38bdf8 !important;
+  outline-offset: -8px;
+  background-color: rgba(56, 189, 248, 0.05) !important;
 }
 
 #canvas-container {

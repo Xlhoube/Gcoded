@@ -4,7 +4,7 @@
 - **Nome do Projecto:** Gcoded
 - **Objectivo:** Criar um gerador de percursos de corte (CAM/toolpath generator) interativo para máquinas CNC, a correr no browser de forma 100% local e offline-first. O utilizador poderá criar ou importar desenhos, configurar parâmetros da fresadora, gerar percursos e exportar o G-code. Todos os dados são guardados localmente no browser (`localStorage`) e através de exportação de ficheiros JSON.
 - **Data de Início:** 2026-08-21
-- **Versão Actual:** v0.5.3
+- **Versão Actual:** v0.6.0
 - **Nível de Risco:** 1 (Baixo - protótipo rápido, sem base de dados remota)
 - **Ambiente de Deploy:** Vercel (servido como site estático)
 
@@ -83,6 +83,13 @@
 - **[2026-10-23] | DECISÃO-017 | Eliminação de ReferenceError residual em generateGCode**
   - **Contexto:** Ao clicar em `⚙️ Gerar Trajectória`, o motor gerava `ReferenceError: selectToolModule is not defined (app.js:2535:24)` devido a uma referência residual à variável do módulo legado que foi removida na reformulação para CNC Router.
   - **Decisão:** Removida a linha `const toolModule = selectToolModule ? selectToolModule.value : 'spindle';`, eliminando a causa raiz do erro. Forçado cache busting com `?v=0.5.3` em `index.html`.
+- **[2026-10-31] | DECISÃO-018 | Importador Nativo DXF com Costura de Contornos e Drag & Drop (Passo 1/3 REA)**
+  - **Contexto:** Necessidade de importar ficheiros padrão de CAD mecânico (AutoCAD / SolidWorks / LibreCAD) sem requisições de rede ou dependências externas, inspirado na análise de engenharia reversa do Layerling (`dxfImport.ts`).
+  - **Decisão:**
+    1. Implementada classe `DxfReader` em JavaScript puro para leitura das entidades `LINE`, `CIRCLE`, `ARC`, `LWPOLYLINE` com fatores de curvatura (*bulges*), conversão de `$INSUNITS` (polegadas para mm) e inversão vertical coordenada para o canvas.
+    2. Desenvolvido algoritmo `stitchPieces` que une extremidades de segmentos contíguos com tolerância de 0.05mm em contornos fechados contínuos (`Z`), evitando paragens e retracções desnecessárias da fresa.
+    3. Adicionado suporte completo para arrastar e largar ficheiros (.dxf, .svg, imagens) diretamente sobre a mesa CNC (`#canvas-area.drop-active`).
+    4. Forçado incremento de versão para `v0.6.0` com cache busting no `index.html`.
 
 ---
 
@@ -106,6 +113,8 @@
 - [x] Motor de Interpolação de Arcos Nativos G2/G3 com vetores relativos I e J (Fase 2)
 - [x] Simulador 3D WebGL integrado em Three.js com painel DRO e controlos de reprodução (Fase 3)
 - [x] Reformulação da barra lateral e biblioteca exclusivamente para Fresas e Routers CNC
-- [ ] Desenvolver estratégia de corte "Exterior (Profile)" com compensação de raio da fresa
-- [ ] Desenvolver estratégia de corte "Interior (Pocket)" para preenchimento de caixas
+- [x] Importador Nativo de DXF com costura automática de segmentos e Drag & Drop na mesa CNC (Passo 1/3)
+- [ ] Sistema de Abas de Fixação / Holding Tabs para corte passante CNC (Passo 2/3)
+- [ ] Desenvolver estratégia de corte "Exterior (Profile)" com compensação de raio da fresa (Passo 3/3)
+- [ ] Desenvolver estratégia de corte "Interior (Pocket)" para preenchimento de caixas (Passo 3/3)
 

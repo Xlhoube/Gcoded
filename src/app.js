@@ -1529,10 +1529,33 @@ function setupEventListeners() {
   btnDelete.addEventListener('click', deleteSelectedObject);
   btnClear.addEventListener('click', clearCanvas);
 
-  // Importação (SVG, PNG, JPG) e Tracing
+  // Importação (DXF, SVG, PNG, JPG) e Tracing
   btnImportTrigger.addEventListener('click', () => fileImport.click());
   fileImport.addEventListener('change', handleFileImport);
   btnVectorize.addEventListener('click', vectorizeSelectedImage);
+
+  // Drag & Drop direto sobre a Mesa de Corte
+  const canvasArea = document.getElementById('canvas-area');
+  if (canvasArea) {
+    canvasArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      canvasArea.classList.add('drop-active');
+    });
+    canvasArea.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      canvasArea.classList.remove('drop-active');
+    });
+    canvasArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      canvasArea.classList.remove('drop-active');
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+        processImportedFile(e.dataTransfer.files[0]);
+      }
+    });
+  }
 
   // Corte 3D por Imagem — abrir modal ao clicar no botão
   btnImport3D.addEventListener('click', () => fileImport3D.click());
@@ -2345,16 +2368,363 @@ function clearVisualToolpaths() {
 }
 
 /**
- * Importa ficheiros SVG ou imagens raster (PNG/JPG)
+ * Motor de Leitura e Descodificação DXF Nativo (Offline-First)
+ * Inspirado e adaptado da engenharia de dxfImport.ts do Layerling
  */
-function handleFileImport(e) {
-  const file = e.target.files[0];
+class DxfReader {
+  static parseToSvgPaths(dxfText, options = {}) {
+    const scaleMmPx = options.scaleMmPx ?? ESCALA_MM_PX;
+    const tolerance = options.tolerance ?? 0.05;
+
+    const lines = dxfText.split(/\r?\n/);
+    let inHeader = false;
+    let inEntities = false;
+    let unitScale = 1.0; // Padrão 1:1 mm
+
+    const rawEntities = [];
+    let currentEntity = null;
+
+    for (let i = 0; i < lines.length - 1; i += 2) {
+      const code = parseInt(lines[i].trim(), 10);
+      const val = lines[i + 1].trim();
+
+      if (code === 0 && val === "SECTION") {
+        const nextVal = lines[i + 3]?.trim();
+        inHeader = (nextVal === "HEADER");
+        inEntities = (nextVal === "ENTITIES");
+      }
+      if (code === 0 && val === "ENDSEC") {
+        inHeader = false;
+        inEntities = false;
+      }
+
+      // Leitura de unidades no cabeçalho ($INSUNITS)
+      if (inHeader && code === 9 && val === "$INSUNITS") {
+        const uVal = parseInt(lines[i + 3]?.trim(), 10);
+        if (uVal === 1) unitScale = 25.4; // Polegadas para mm
+        else if (uVal === 2) unitScale = 304.8; // Pés para mm
+        else if (uVal === 4) unitScale = 1.0; // Milímetros
+        else if (uVal === 5) unitScale = 10.0; // Centímetros para mm
+        else if (uVal === 6) unitScale = 1000.0; // Metros para mm
+      }
+
+      if (inEntities) {
+        if (code === 0) {
+          if (currentEntity) rawEntities.push(currentEntity);
+          currentEntity = { type: val, codes: {} };
+        } else if (currentEntity) {
+          if (!currentEntity.codes[code]) currentEntity.codes[code] = [];
+          currentEntity.codes[code].push(val);
+        }
+      }
+    }
+    if (currentEntity) rawEntities.push(currentEntity);
+
+    const pieces = [];
+    const closedLoops = [];
+
+    const getNum = (ent, c, def = 0) => parseFloat(ent.codes[c]?.[0] || def);
+    const getAll = (ent, c) => (ent.codes[c] || []).map(v => parseFloat(v));
+
+    for (const ent of rawEntities) {
+      switch (ent.type) {
+        case "LINE": {
+          const x1 = getNum(ent, 10);
+          const y1 = getNum(ent, 20);
+          const x2 = getNum(ent, 11);
+          const y2 = getNum(ent, 21);
+          pieces.push({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 } });
+          break;
+        }
+
+        case "CIRCLE": {
+          const cx = getNum(ent, 10);
+          const cy = getNum(ent, 20);
+          const r = getNum(ent, 40);
+          if (r > 0) {
+            // Círculo fechado aproximado em 4 quadrantes cúbicos de Bézier (k = r * 0.5522847498)
+            const k = r * 0.5522847498;
+            closedLoops.push([
+              { start: { x: cx + r, y: cy }, c1: { x: cx + r, y: cy + k }, c2: { x: cx + k, y: cy + r }, end: { x: cx, y: cy + r } },
+              { start: { x: cx, y: cy + r }, c1: { x: cx - k, y: cy + r }, c2: { x: cx - r, y: cy + k }, end: { x: cx - r, y: cy } },
+              { start: { x: cx - r, y: cy }, c1: { x: cx - r, y: cy - k }, c2: { x: cx - k, y: cy - r }, end: { x: cx, y: cy - r } },
+              { start: { x: cx, y: cy - r }, c1: { x: cx + k, y: cy - r }, c2: { x: cx + r, y: cy - k }, end: { x: cx + r, y: cy } },
+            ]);
+          }
+          break;
+        }
+
+        case "ARC": {
+          const cx = getNum(ent, 10);
+          const cy = getNum(ent, 20);
+          const r = getNum(ent, 40);
+          const startDeg = getNum(ent, 50);
+          const endDeg = getNum(ent, 51);
+
+          let startRad = (startDeg * Math.PI) / 180;
+          let endRad = (endDeg * Math.PI) / 180;
+          while (endRad <= startRad) endRad += 2 * Math.PI;
+
+          const totalSweep = endRad - startRad;
+          const steps = Math.max(1, Math.ceil(totalSweep / (Math.PI / 2)));
+          const stepAngle = totalSweep / steps;
+
+          for (let s = 0; s < steps; s++) {
+            const a1 = startRad + s * stepAngle;
+            const a2 = a1 + stepAngle;
+            const halfDiff = (a2 - a1) / 2;
+            const k = (4 / 3) * Math.tan(halfDiff / 2) * r;
+
+            const p1 = { x: cx + r * Math.cos(a1), y: cy + r * Math.sin(a1) };
+            const p2 = { x: cx + r * Math.cos(a2), y: cy + r * Math.sin(a2) };
+
+            const t1 = { x: -Math.sin(a1), y: Math.cos(a1) };
+            const t2 = { x: -Math.sin(a2), y: Math.cos(a2) };
+
+            pieces.push({
+              start: p1,
+              c1: { x: p1.x + t1.x * k, y: p1.y + t1.y * k },
+              c2: { x: p2.x - t2.x * k, y: p2.y - t2.y * k },
+              end: p2
+            });
+          }
+          break;
+        }
+
+        case "LWPOLYLINE": {
+          const xs = getAll(ent, 10);
+          const ys = getAll(ent, 20);
+          const bulges = getAll(ent, 42);
+          const flags = parseInt(ent.codes[70]?.[0] || 0, 10);
+          const closed = (flags & 1) === 1;
+
+          if (xs.length > 0) {
+            const count = closed ? xs.length : xs.length - 1;
+            const polyPieces = [];
+            for (let i = 0; i < count; i++) {
+              const next = (i + 1) % xs.length;
+              const p1 = { x: xs[i], y: ys[i] };
+              const p2 = { x: xs[next], y: ys[next] };
+              const b = bulges[i] || 0;
+
+              if (Math.abs(b) < 1e-6) {
+                polyPieces.push({ start: p1, end: p2 });
+              } else {
+                const theta = 4 * Math.atan(b);
+                const chord = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+                const r = Math.abs(chord / (2 * Math.sin(theta / 2)));
+                const halfTheta = theta / 2;
+                const k = (4 / 3) * Math.tan(halfTheta / 2) * r;
+                const chordAngle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+                const alpha = (Math.PI - Math.abs(theta)) / 2;
+                const sign = b > 0 ? 1 : -1;
+                const t1Angle = chordAngle + sign * alpha;
+                const t2Angle = chordAngle + Math.PI - sign * alpha;
+
+                polyPieces.push({
+                  start: p1,
+                  c1: { x: p1.x + Math.cos(t1Angle) * k, y: p1.y + Math.sin(t1Angle) * k },
+                  c2: { x: p2.x + Math.cos(t2Angle) * k, y: p2.y + Math.sin(t2Angle) * k },
+                  end: p2
+                });
+              }
+            }
+            if (closed) {
+              closedLoops.push(polyPieces);
+            } else {
+              pieces.push(...polyPieces);
+            }
+          }
+          break;
+        }
+      }
+    }
+
+    const joined = this.stitchPieces(pieces, tolerance);
+    const allLoops = [...closedLoops, ...joined.loops];
+    const openRuns = joined.open;
+
+    const svgPathStrings = [];
+    const totalScale = unitScale * scaleMmPx;
+
+    const toSvg = (p) => ({
+      x: p.x * totalScale,
+      y: -p.y * totalScale // Inversão vertical para manter orientação no canvas
+    });
+
+    for (const loop of allLoops) {
+      if (loop.length === 0) continue;
+      const s0 = toSvg(loop[0].start);
+      let d = `M ${s0.x.toFixed(3)} ${s0.y.toFixed(3)}`;
+      for (const piece of loop) {
+        const e = toSvg(piece.end);
+        if (piece.c1 && piece.c2) {
+          const c1 = toSvg(piece.c1);
+          const c2 = toSvg(piece.c2);
+          d += ` C ${c1.x.toFixed(3)} ${c1.y.toFixed(3)}, ${c2.x.toFixed(3)} ${c2.y.toFixed(3)}, ${e.x.toFixed(3)} ${e.y.toFixed(3)}`;
+        } else {
+          d += ` L ${e.x.toFixed(3)} ${e.y.toFixed(3)}`;
+        }
+      }
+      d += ` Z`;
+      svgPathStrings.push(d);
+    }
+
+    for (const run of openRuns) {
+      if (run.length === 0) continue;
+      const s0 = toSvg(run[0].start);
+      let d = `M ${s0.x.toFixed(3)} ${s0.y.toFixed(3)}`;
+      for (const piece of run) {
+        const e = toSvg(piece.end);
+        if (piece.c1 && piece.c2) {
+          const c1 = toSvg(piece.c1);
+          const c2 = toSvg(piece.c2);
+          d += ` C ${c1.x.toFixed(3)} ${c1.y.toFixed(3)}, ${c2.x.toFixed(3)} ${c2.y.toFixed(3)}, ${e.x.toFixed(3)} ${e.y.toFixed(3)}`;
+        } else {
+          d += ` L ${e.x.toFixed(3)} ${e.y.toFixed(3)}`;
+        }
+      }
+      svgPathStrings.push(d);
+    }
+
+    return {
+      svgPaths: svgPathStrings,
+      totalLoops: allLoops.length,
+      totalOpen: openRuns.length,
+      unitScale
+    };
+  }
+
+  static stitchPieces(pieces, tolerance) {
+    if (pieces.length === 0) return { loops: [], open: [] };
+
+    const pool = pieces.map(p => ({ ...p }));
+    const loops = [];
+    const open = [];
+
+    const dist = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
+    const reverse = (piece) => piece.c1 && piece.c2
+      ? { start: piece.end, c1: piece.c2, c2: piece.c1, end: piece.start }
+      : { start: piece.end, end: piece.start };
+
+    const used = new Array(pool.length).fill(false);
+
+    for (let i = 0; i < pool.length; i++) {
+      if (used[i]) continue;
+      used[i] = true;
+
+      const currentRun = [pool[i]];
+      let expanded = true;
+
+      while (expanded) {
+        expanded = false;
+        const tail = currentRun[currentRun.length - 1].end;
+
+        if (currentRun.length > 1 && dist(tail, currentRun[0].start) <= tolerance) {
+          break;
+        }
+
+        let bestIdx = -1;
+        let bestDist = tolerance;
+        let mustReverse = false;
+
+        for (let j = 0; j < pool.length; j++) {
+          if (used[j]) continue;
+          const dStart = dist(tail, pool[j].start);
+          const dEnd = dist(tail, pool[j].end);
+
+          if (dStart <= bestDist) {
+            bestDist = dStart;
+            bestIdx = j;
+            mustReverse = false;
+          } else if (dEnd <= bestDist) {
+            bestDist = dEnd;
+            bestIdx = j;
+            mustReverse = true;
+          }
+        }
+
+        if (bestIdx !== -1) {
+          used[bestIdx] = true;
+          const nextPiece = mustReverse ? reverse(pool[bestIdx]) : pool[bestIdx];
+          currentRun.push(nextPiece);
+          expanded = true;
+        }
+      }
+
+      const tail = currentRun[currentRun.length - 1].end;
+      if (currentRun.length > 1 && dist(tail, currentRun[0].start) <= tolerance) {
+        loops.push(currentRun);
+      } else {
+        open.push(currentRun);
+      }
+    }
+
+    return { loops, open };
+  }
+}
+
+/**
+ * Processa qualquer ficheiro suportado (.dxf, .svg, ou imagem raster)
+ */
+function processImportedFile(file) {
   if (!file) return;
 
   clearVisualToolpaths();
+  const lowerName = file.name ? file.name.toLowerCase() : '';
   const reader = new FileReader();
 
-  if (file.type === 'image/svg+xml') {
+  // 1. FICHEIRO DXF (AutoCAD / CAD mecânico)
+  if (lowerName.endsWith('.dxf')) {
+    reader.onload = function(evt) {
+      try {
+        const text = evt.target.result;
+        const result = DxfReader.parseToSvgPaths(text, { scaleMmPx: ESCALA_MM_PX });
+
+        if (!result.svgPaths || result.svgPaths.length === 0) {
+          alert("Não foram encontrados contornos nem percursos vetoriais legíveis neste ficheiro DXF.");
+          return;
+        }
+
+        // Unir todos os contornos num único Path com múltiplos subcaminhos
+        const unifiedD = result.svgPaths.join(' ');
+        const pathObj = new fabric.Path(unifiedD, {
+          stroke: '#38bdf8',
+          fill: '',
+          strokeWidth: 1.5,
+          strokeUniform: true
+        });
+
+        // Se exceder a mesa de corte, redimensionar proporcionalmente
+        const maxAllowedW = canvas.width * 0.9;
+        const maxAllowedH = canvas.height * 0.9;
+        if (pathObj.width > maxAllowedW || pathObj.height > maxAllowedH) {
+          pathObj.scaleToWidth(Math.min(maxAllowedW, maxAllowedH));
+        }
+
+        // Posicionar no centro da mesa
+        pathObj.set({
+          left: (canvas.width - pathObj.getScaledWidth()) / 2,
+          top: (canvas.height - pathObj.getScaledHeight()) / 2
+        });
+
+        canvas.add(pathObj);
+        canvas.setActiveObject(pathObj);
+        canvas.requestRenderAll();
+        saveAppState();
+
+        showCamToast(`📐 DXF importado: ${result.totalLoops} contorno(s) fechado(s), ${result.totalOpen} aberto(s)!`);
+      } catch (err) {
+        console.error("Erro ao importar DXF:", err);
+        alert(`Erro ao processar ficheiro DXF: ${err.message}`);
+      }
+    };
+    reader.readAsText(file);
+    return;
+  }
+
+  // 2. FICHEIRO SVG
+  if (file.type === 'image/svg+xml' || lowerName.endsWith('.svg')) {
     reader.onload = function(f) {
       fabric.loadSVGFromString(f.target.result, function(objects, options) {
         const obj = fabric.util.groupSVGElements(objects, options);
@@ -2371,10 +2741,15 @@ function handleFileImport(e) {
         canvas.setActiveObject(obj);
         canvas.requestRenderAll();
         saveAppState();
+        showCamToast("📐 SVG importado para a mesa com sucesso!");
       });
     };
     reader.readAsText(file);
-  } else if (file.type.match('image.*')) {
+    return;
+  }
+
+  // 3. IMAGEM RASTER (PNG, JPG, WEBP)
+  if (file.type.match('image.*') || lowerName.endsWith('.png') || lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) {
     reader.onload = function(f) {
       fabric.Image.fromURL(f.target.result, function(img) {
         img.scaleToWidth(250);
@@ -2388,11 +2763,19 @@ function handleFileImport(e) {
         canvas.setActiveObject(img);
         canvas.requestRenderAll();
         saveAppState();
+        showCamToast("🖼️ Imagem importada para a mesa!");
       });
     };
     reader.readAsDataURL(file);
   }
-  
+}
+
+/**
+ * Importa ficheiros SVG, DXF ou imagens raster (PNG/JPG)
+ */
+function handleFileImport(e) {
+  const file = e.target.files[0];
+  if (file) processImportedFile(file);
   e.target.value = '';
 }
 
