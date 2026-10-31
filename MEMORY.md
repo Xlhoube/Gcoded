@@ -116,6 +116,12 @@
     3. Integrado cartão de destaque *glassmorphism* com a **Dica de Engenharia**: *"Se tiveres o desenho do π em formato vetorial puro (SVG ou o recém-implementado DXF), podes importá-lo diretamente sem precisar de vetorizar, garantindo curvas e arcos matematicamente perfeitos!"*.
     4. Ao selecionar ou largar um ficheiro na caixa, a modal fecha automaticamente e o desenho é importado diretamente para a mesa de corte CNC com notificação de confirmação.
     5. Incremento de versão para `v0.8.1` com cache-busting atualizado.
+- **[2026-10-31] | DECISÃO-022 | Configuração de Repositório Remoto GitHub e Sincronização Upstream**
+  - **Contexto:** O repositório Git local não tinha remote origin associado, mantendo todo o histórico apenas no disco local. O utilizador forneceu o URL remoto do GitHub.
+  - **Decisão:**
+    1. Configurado o remote origin para `https://github.com/Xlhoube/Gcoded.git`.
+    2. Alinhado o ramo principal para `main` com tracking upstream (`git push -u origin main`).
+    3. Todos os 25 commits atómicos (desde o protótipo inicial até v0.8.1 com DXF, Holding Tabs, Offsets de Fresagem e Dica de Engenharia) foram enviados e sincronizados com sucesso no GitHub.
 
 ---
 
@@ -144,4 +150,5 @@
 - [x] Desenvolver estratégia de corte "Exterior (Profile)" com compensação de raio da fresa (Passo 3/3)
 - [x] Desenvolver estratégia de corte "Interior (Pocket)" para preenchimento de caixas (Passo 3/3)
 - [x] Caixa de Importação de Ficheiros com Dropzone e Dica de Engenharia para Vetores Puros (π, SVG e DXF)
+- [x] Repositório GitHub remoto configurado e sincronizado com tracking upstream (main)
 
