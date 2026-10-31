@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-PT">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,17 +12,18 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
+
 <body>
   <div id="app-container">
-    
+
     <!-- BARRA DE FERRAMENTAS SUPERIOR -->
     <header id="top-bar">
       <div class="logo">
         <h1>Gcoded<span>CAM</span></h1>
       </div>
-      
+
       <div class="divider"></div>
-      
+
       <div class="tool-group">
         <button id="tool-select" class="tool-btn active" title="Selecionar e Mover">
           <span class="icon">🔀</span> Seleção
@@ -41,14 +43,17 @@
 
       <div class="action-group">
         <input type="file" id="file-import" accept=".svg,.png,.jpg,.jpeg,.dxf" style="display: none;">
-        <button id="btn-import-trigger" class="action-btn" title="Importar DXF, SVG, PNG ou JPG (ou arrastar para a mesa)">
+        <button id="btn-import-trigger" class="action-btn"
+          title="Importar DXF, SVG, PNG ou JPG (ou arrastar para a mesa)">
           📥 Importar
         </button>
-        <button id="btn-vectorize" class="action-btn disabled" title="Converter imagem raster selecionada em contorno vetorial" disabled>
+        <button id="btn-vectorize" class="action-btn disabled"
+          title="Converter imagem raster selecionada em contorno vetorial" disabled>
           ⚡ Vetorizar
         </button>
         <input type="file" id="file-import-3d" accept=".png,.jpg,.jpeg,.webp" style="display: none;">
-        <button id="btn-import-3d" class="action-btn relief-btn" title="Importar fotografia para Corte 3D por Relevo (Grayscale Relief Carving)">
+        <button id="btn-import-3d" class="action-btn relief-btn"
+          title="Importar fotografia para Corte 3D por Relevo (Grayscale Relief Carving)">
           🖼️ Corte 3D
         </button>
       </div>
@@ -67,7 +72,7 @@
 
     <!-- ÁREA DE TRABALHO E TRATAMENTO CNC -->
     <main id="workspace">
-      
+
       <!-- CANVAS CENTRAL & SIMULADOR 3D -->
       <section id="canvas-area">
         <!-- Barra de Selecção de Vista (Editor 2D vs Simulador 3D) -->
@@ -94,13 +99,14 @@
         <!-- Vista 3D (Three.js WebGL Simulator) -->
         <div id="sim3d-container" style="display: none; position: relative; width: 100%; height: 100%;">
           <canvas id="three-canvas"></canvas>
-          
+
           <!-- Controlos Flutuantes da Simulação 3D -->
           <div class="sim-control-panel">
             <div class="sim-playback-row">
-              <button id="btn-sim-play" class="sim-btn primary" title="Iniciar / Pausar Simulação">▶️ Reproduzir</button>
+              <button id="btn-sim-play" class="sim-btn primary" title="Iniciar / Pausar Simulação">▶️
+                Reproduzir</button>
               <button id="btn-sim-reset" class="sim-btn" title="Reiniciar Percurso">⏮️</button>
-              
+
               <div class="sim-speed-group">
                 <label for="sim-speed-select">Velocidade:</label>
                 <select id="sim-speed-select">
@@ -120,7 +126,8 @@
             </div>
 
             <div class="sim-timeline-row">
-              <input type="range" id="sim-timeline" min="0" max="100" value="0" step="0.1" title="Progresso da Fresagem">
+              <input type="range" id="sim-timeline" min="0" max="100" value="0" step="0.1"
+                title="Progresso da Fresagem">
               <span id="sim-progress-text">0.0%</span>
             </div>
 
@@ -176,11 +183,13 @@
           <div class="input-grid" style="margin-top: 0.4rem;">
             <div class="input-field">
               <label for="param-wcs-x">Posição X (mm)</label>
-              <input type="number" id="param-wcs-x" value="0.0" step="5" min="0" max="2000" readonly style="opacity: 0.6;">
+              <input type="number" id="param-wcs-x" value="0.0" step="5" min="0" max="2000" readonly
+                style="opacity: 0.6;">
             </div>
             <div class="input-field">
               <label for="param-wcs-y">Posição Y (mm)</label>
-              <input type="number" id="param-wcs-y" value="0.0" step="5" min="0" max="2000" readonly style="opacity: 0.6;">
+              <input type="number" id="param-wcs-y" value="0.0" step="5" min="0" max="2000" readonly
+                style="opacity: 0.6;">
             </div>
           </div>
         </div>
@@ -193,7 +202,8 @@
               <select id="select-tool-library">
                 <!-- Preenchido dinamicamente via JS -->
               </select>
-              <button id="btn-open-tool-manager" class="primary-btn tool-manager-btn" style="padding: 0 0.8rem; height: 38px; font-size: 0.8rem; white-space: nowrap;">⚙️ Gerir</button>
+              <button id="btn-open-tool-manager" class="primary-btn tool-manager-btn"
+                style="padding: 0 0.8rem; height: 38px; font-size: 0.8rem; white-space: nowrap;">⚙️ Gerir</button>
             </div>
           </div>
           <div class="input-grid">
@@ -266,14 +276,45 @@
             </select>
           </div>
           <div class="checkbox-field" style="margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
-            <input type="checkbox" id="param-use-arcs" checked style="accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;">
-            <label for="param-use-arcs" style="font-size: 0.8rem; cursor: pointer; color: #cbd5e1;">Interpolação Circular Nativa (G2/G3 I,J)</label>
+            <input type="checkbox" id="param-use-arcs" checked
+              style="accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;">
+            <label for="param-use-arcs" style="font-size: 0.8rem; cursor: pointer; color: #cbd5e1;">Interpolação
+              Circular Nativa (G2/G3 I,J)</label>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+            <h2 style="margin: 0; font-size: 0.95rem;">Abas de Retenção (Holding Tabs)</h2>
+            <div class="checkbox-field" style="display: flex; align-items: center; gap: 0.4rem;">
+              <input type="checkbox" id="param-use-tabs"
+                style="accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;">
+              <label for="param-use-tabs" style="font-size: 0.8rem; cursor: pointer; color: #38bdf8; font-weight: 600;">Ativar</label>
+            </div>
+          </div>
+          <p style="font-size: 0.75rem; color: #94a3b8; margin: 0 0 0.6rem 0;">
+            Mantém pontes sólidas na última passagem para impedir que a peça cortada se solte da chapa.
+          </p>
+          <div id="tabs-settings-grid" class="input-grid" style="opacity: 0.45; pointer-events: none; transition: opacity 0.2s ease;">
+            <div class="input-field">
+              <label for="param-tab-count">Quantidade</label>
+              <input type="number" id="param-tab-count" value="4" min="1" max="20" step="1">
+            </div>
+            <div class="input-field">
+              <label for="param-tab-width">Largura (mm)</label>
+              <input type="number" id="param-tab-width" value="5.0" min="1.0" max="30.0" step="0.5">
+            </div>
+            <div class="input-field">
+              <label for="param-tab-height">Espessura (mm)</label>
+              <input type="number" id="param-tab-height" value="1.5" min="0.2" max="10.0" step="0.1">
+            </div>
           </div>
         </div>
 
         <div class="panel-actions">
           <button id="btn-generate" class="primary-btn">⚙️ Gerar Trajectória</button>
-          <button id="btn-open-sim3d" class="secondary-btn" title="Ver simulação do corte em 3D">👁️ Ver no Simulador 3D</button>
+          <button id="btn-open-sim3d" class="secondary-btn" title="Ver simulação do corte em 3D">👁️ Ver no Simulador
+            3D</button>
           <button id="btn-download" class="secondary-btn disabled" disabled>💾 Guardar G-code (.nc)</button>
         </div>
 
@@ -284,19 +325,24 @@
               📋 Copiar
             </button>
           </div>
-          
+
           <!-- Cartão de Estatísticas e Diagnóstico CAM (Fase 1 - Parser Of4W) -->
           <div id="gcode-stats-card" class="gcode-stats-card" style="display: none;">
             <div class="stats-row">
-              <div class="stat-badge"><span class="stat-icon">⏱️</span> <strong>Tempo:</strong> <span id="stat-est-time">--</span></div>
-              <div class="stat-badge"><span class="stat-icon">📏</span> <strong>Z Corte:</strong> <span id="stat-z-range">--</span></div>
+              <div class="stat-badge"><span class="stat-icon">⏱️</span> <strong>Tempo:</strong> <span
+                  id="stat-est-time">--</span></div>
+              <div class="stat-badge"><span class="stat-icon">📏</span> <strong>Z Corte:</strong> <span
+                  id="stat-z-range">--</span></div>
             </div>
             <div class="stats-row" style="margin-top: 0.35rem;">
-              <div class="stat-badge"><span class="stat-icon">📐</span> <strong>Dimensões:</strong> <span id="stat-bbox">--</span></div>
-              <div class="stat-badge"><span class="stat-icon">🛣️</span> <strong>Distância:</strong> <span id="stat-distance">--</span></div>
+              <div class="stat-badge"><span class="stat-icon">📐</span> <strong>Dimensões:</strong> <span
+                  id="stat-bbox">--</span></div>
+              <div class="stat-badge"><span class="stat-icon">🛣️</span> <strong>Distância:</strong> <span
+                  id="stat-distance">--</span></div>
             </div>
             <div id="gcode-safety-alert" class="safety-badge safe" style="margin-top: 0.45rem;">
-              <span id="gcode-safety-icon">✅</span> <span id="gcode-safety-msg">Percurso validado dentro dos limites da mesa.</span>
+              <span id="gcode-safety-icon">✅</span> <span id="gcode-safety-msg">Percurso validado dentro dos limites da
+                mesa.</span>
             </div>
           </div>
 
@@ -337,7 +383,7 @@
             </tbody>
           </table>
         </div>
-        
+
         <!-- Formulário para Criar/Editar Ferramenta -->
         <div class="tool-form-container">
           <h3>➕ Adicionar / Editar Fresa de Router</h3>
@@ -396,10 +442,13 @@
           </form>
         </div>
       </div>
-      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid rgba(255,255,255,0.08);">
+      <div class="modal-footer"
+        style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid rgba(255,255,255,0.08);">
         <div>
-          <button id="btn-export-tools" class="secondary-btn" style="font-size: 0.8rem;">📤 Exportar Fresas (JSON)</button>
-          <button id="btn-import-tools" class="secondary-btn" style="font-size: 0.8rem; margin-left: 0.4rem;">📥 Importar Fresas</button>
+          <button id="btn-export-tools" class="secondary-btn" style="font-size: 0.8rem;">📤 Exportar Fresas
+            (JSON)</button>
+          <button id="btn-import-tools" class="secondary-btn" style="font-size: 0.8rem; margin-left: 0.4rem;">📥
+            Importar Fresas</button>
           <input type="file" id="file-import-tools" style="display: none;" accept=".json">
         </div>
         <button id="btn-close-tool-manager-footer" class="secondary-btn">Fechar</button>
@@ -410,11 +459,13 @@
   <!-- Modal de Corte 3D por Imagem (AI Deep Map & Relief Carving) -->
   <div id="relief-modal" class="modal" style="display: none;">
     <div class="modal-content relief-modal-content">
-      
+
       <div class="modal-header">
         <div>
           <h2>🖼️ Deep Map 3D por IA &mdash; Relevo CNC</h2>
-          <p style="margin: 0.2rem 0 0; font-size: 0.8rem; color: #94a3b8;">A Inteligência Artificial extrai a volumetria 3D real da fotografia (rosto, relevo e profundidade). Clica em <strong>Colocar na Mesa</strong> para avançar.</p>
+          <p style="margin: 0.2rem 0 0; font-size: 0.8rem; color: #94a3b8;">A Inteligência Artificial extrai a
+            volumetria 3D real da fotografia (rosto, relevo e profundidade). Clica em <strong>Colocar na Mesa</strong>
+            para avançar.</p>
         </div>
         <button id="btn-close-relief" class="close-btn">&times;</button>
       </div>
@@ -441,7 +492,8 @@
         <button type="button" id="btn-mode-luminance" class="mode-pill">
           📊 Luminância 2D
         </button>
-        <button type="button" id="btn-relief-auto-tune" class="btn-auto-tune" title="Analisa a iluminação, contraste e sombras da fotografia e calibra automaticamente as melhores definições de relevo">
+        <button type="button" id="btn-relief-auto-tune" class="btn-auto-tune"
+          title="Analisa a iluminação, contraste e sombras da fotografia e calibra automaticamente as melhores definições de relevo">
           ✨ Otimização Automática
         </button>
       </div>
@@ -458,8 +510,10 @@
             <div style="display: flex; justify-content: space-between; align-items: center;">
               <span class="preview-label" id="lbl-depth-preview-title">Relevo 3D Esculpido (ArtCAM)</span>
               <div class="preview-render-toggle" style="display: flex; gap: 0.3rem;">
-                <button type="button" id="btn-view-artcam" class="view-btn active" title="Visualização 3D com luz e sombras estilo ArtCAM">🏆 3D ArtCAM</button>
-                <button type="button" id="btn-view-grayscale" class="view-btn" title="Visualização técnica em escala de cinzentos">🗺️ Mapa Z</button>
+                <button type="button" id="btn-view-artcam" class="view-btn active"
+                  title="Visualização 3D com luz e sombras estilo ArtCAM">🏆 3D ArtCAM</button>
+                <button type="button" id="btn-view-grayscale" class="view-btn"
+                  title="Visualização técnica em escala de cinzentos">🗺️ Mapa Z</button>
               </div>
             </div>
             <canvas id="preview-depthmap" class="preview-canvas"></canvas>
@@ -470,27 +524,32 @@
         <div class="relief-controls">
 
           <div class="relief-control-row">
-            <label for="relief-max-depth">Profundidade Z do Relevo: <strong id="lbl-relief-depth">2.0</strong> mm</label>
+            <label for="relief-max-depth">Profundidade Z do Relevo: <strong id="lbl-relief-depth">2.0</strong>
+              mm</label>
             <input type="range" id="relief-max-depth" min="0.5" max="15" step="0.5" value="2.0">
           </div>
 
           <div class="relief-control-row">
-            <label for="relief-detail">👁️ Nitidez Facial (Olhos, Boca &amp; Traços): <strong id="lbl-relief-detail">75</strong>%</label>
+            <label for="relief-detail">👁️ Nitidez Facial (Olhos, Boca &amp; Traços): <strong
+                id="lbl-relief-detail">75</strong>%</label>
             <input type="range" id="relief-detail" min="0" max="100" step="5" value="75">
           </div>
 
           <div class="relief-control-row">
-            <label for="relief-light-balance">💡 Uniformização de Luz (Remove Sombras Desiguais): <strong id="lbl-relief-light-balance">50</strong>%</label>
+            <label for="relief-light-balance">💡 Uniformização de Luz (Remove Sombras Desiguais): <strong
+                id="lbl-relief-light-balance">50</strong>%</label>
             <input type="range" id="relief-light-balance" min="0" max="100" step="5" value="50">
           </div>
 
           <div class="relief-control-row">
-            <label for="relief-contrast">🏔️ Volume 3D / Curvatura da Cabeça: <strong id="lbl-relief-contrast">1.2</strong></label>
+            <label for="relief-contrast">🏔️ Volume 3D / Curvatura da Cabeça: <strong
+                id="lbl-relief-contrast">1.2</strong></label>
             <input type="range" id="relief-contrast" min="0.5" max="3.0" step="0.1" value="1.2">
           </div>
 
           <div class="relief-control-row">
-            <label for="relief-bg-cut">✂️ Isolamento do Sujeito (Corte de Fundo): <strong id="lbl-relief-bg-cut">15</strong>%</label>
+            <label for="relief-bg-cut">✂️ Isolamento do Sujeito (Corte de Fundo): <strong
+                id="lbl-relief-bg-cut">15</strong>%</label>
             <input type="range" id="relief-bg-cut" min="0" max="60" step="5" value="15">
           </div>
 
@@ -519,15 +578,19 @@
 
           <!-- Ajustes Opcionais / Avançados -->
           <details class="relief-advanced-details" style="margin-top: 0.2rem;">
-            <summary style="font-size: 0.78rem; color: #94a3b8; cursor: pointer;">⚙️ Iluminação 3D &amp; Filtros Avançados</summary>
-            <div style="display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px solid rgba(255,255,255,0.05);">
+            <summary style="font-size: 0.78rem; color: #94a3b8; cursor: pointer;">⚙️ Iluminação 3D &amp; Filtros
+              Avançados</summary>
+            <div
+              style="display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px solid rgba(255,255,255,0.05);">
               <div class="relief-control-row">
-                <label for="relief-light-angle">☀️ Ângulo da Luz 3D: <strong id="lbl-relief-light-angle">315</strong>°</label>
+                <label for="relief-light-angle">☀️ Ângulo da Luz 3D: <strong
+                    id="lbl-relief-light-angle">315</strong>°</label>
                 <input type="range" id="relief-light-angle" min="0" max="360" step="15" value="315">
               </div>
               <div class="relief-control-row">
                 <label for="relief-material-theme">🎨 Material da Simulação</label>
-                <select id="relief-material-theme" style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 0.3rem; border-radius: 6px; font-size: 0.8rem;">
+                <select id="relief-material-theme"
+                  style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 0.3rem; border-radius: 6px; font-size: 0.8rem;">
                   <option value="artcam-gold" selected>🏆 Dourado / Latão (Estilo ArtCAM)</option>
                   <option value="carved-wood">🪵 Madeira Nogueira Esculpida</option>
                   <option value="sculptor-clay">🏺 Argila / Gesso de Escultor</option>
@@ -547,9 +610,11 @@
         </div>
       </div>
 
-      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid rgba(255,255,255,0.08);">
+      <div class="modal-footer"
+        style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid rgba(255,255,255,0.08);">
         <div style="font-size: 0.82rem; color: #94a3b8;">
-          Tamanho estimado: <strong id="lbl-relief-size" style="color: #a78bfa;">---</strong> | <strong id="lbl-relief-lines">---</strong>
+          Tamanho estimado: <strong id="lbl-relief-size" style="color: #a78bfa;">---</strong> | <strong
+            id="lbl-relief-lines">---</strong>
         </div>
         <div style="display: flex; gap: 0.5rem;">
           <button id="btn-close-relief-footer" class="secondary-btn">Cancelar</button>
@@ -577,6 +642,7 @@
     <button id="cam-toast-action" class="cam-toast-btn">👁️ Abrir Simulador 3D</button>
   </div>
 
-  <script type="module" src="./src/app.js?v=0.6.0"></script>
+  <script type="module" src="./src/app.js?v=0.7.0"></script>
 </body>
+
 </html>

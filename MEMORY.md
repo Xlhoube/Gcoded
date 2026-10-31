@@ -4,7 +4,7 @@
 - **Nome do Projecto:** Gcoded
 - **Objectivo:** Criar um gerador de percursos de corte (CAM/toolpath generator) interativo para máquinas CNC, a correr no browser de forma 100% local e offline-first. O utilizador poderá criar ou importar desenhos, configurar parâmetros da fresadora, gerar percursos e exportar o G-code. Todos os dados são guardados localmente no browser (`localStorage`) e através de exportação de ficheiros JSON.
 - **Data de Início:** 2026-08-21
-- **Versão Actual:** v0.6.0
+- **Versão Actual:** v0.7.0
 - **Nível de Risco:** 1 (Baixo - protótipo rápido, sem base de dados remota)
 - **Ambiente de Deploy:** Vercel (servido como site estático)
 
@@ -90,6 +90,13 @@
     2. Desenvolvido algoritmo `stitchPieces` que une extremidades de segmentos contíguos com tolerância de 0.05mm em contornos fechados contínuos (`Z`), evitando paragens e retracções desnecessárias da fresa.
     3. Adicionado suporte completo para arrastar e largar ficheiros (.dxf, .svg, imagens) diretamente sobre a mesa CNC (`#canvas-area.drop-active`).
     4. Forçado incremento de versão para `v0.6.0` com cache busting no `index.html`.
+- **[2026-10-31] | DECISÃO-019 | Sistema de Abas de Retenção (Holding Tabs) para Corte Passante CNC (Passo 2/3 REA)**
+  - **Contexto:** Ao cortar peças em profundidade total com contornos fechados, a peça desprendia-se da chapa de sacrifício na última passagem Z, colidindo com a fresa a alta rotação. Inspirado no algoritmo de pontes determinísticas do Layerling (`stencilBridges.ts`).
+  - **Decisão:**
+    1. Criada secção dedicada na barra lateral com interruptor para activar/desactivar, quantidade de abas, largura (mm) e espessura/altura (mm).
+    2. Desenvolvido motor de amostragem `generateContourWithTabs` que divide o perímetro em intervalos uniformes e calcula waypoints com elevação automática a `Z_tab = depthTotal + tabHeight` exclusivamente nas passagens inferiores onde a peça ficaria solta.
+    3. Geração de percurso G-code com elevações verticais suaves `(Subida Aba)` e mergulhos `(Descida Corte)`, visualizadas automaticamente em 3D WebGL no Three.js.
+    4. Forçado incremento de versão para `v0.7.0` com persistência completa em `localStorage`.
 
 ---
 
@@ -114,7 +121,7 @@
 - [x] Simulador 3D WebGL integrado em Three.js com painel DRO e controlos de reprodução (Fase 3)
 - [x] Reformulação da barra lateral e biblioteca exclusivamente para Fresas e Routers CNC
 - [x] Importador Nativo de DXF com costura automática de segmentos e Drag & Drop na mesa CNC (Passo 1/3)
-- [ ] Sistema de Abas de Fixação / Holding Tabs para corte passante CNC (Passo 2/3)
+- [x] Sistema de Abas de Fixação / Holding Tabs para corte passante CNC (Passo 2/3)
 - [ ] Desenvolver estratégia de corte "Exterior (Profile)" com compensação de raio da fresa (Passo 3/3)
 - [ ] Desenvolver estratégia de corte "Interior (Pocket)" para preenchimento de caixas (Passo 3/3)
 

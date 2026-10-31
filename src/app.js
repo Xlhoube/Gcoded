@@ -50,6 +50,7 @@ const DEFAULT_TOOLS = [
 
 // Parâmetros de Fresa e CNC Router
 let paramToolType, inputSpindleSpeed, lblSpindleSpeed, inputStepover, paramUseArcs;
+let paramUseTabs, tabsSettingsGrid, paramTabCount, paramTabWidth, paramTabHeight;
 
 // Elementos do Gestor de Ferramentas (Modal)
 let toolManagerModal, btnCloseToolManager, btnCloseToolManagerFooter, toolManagerTbody, toolManagerForm, btnMngrClearForm;
@@ -157,6 +158,26 @@ function cacheUIElements() {
   paramUseArcs = document.getElementById('param-use-arcs');
   inputSpindleSpeed = document.getElementById('param-spindle-speed');
   lblSpindleSpeed = document.getElementById('lbl-spindle-speed');
+
+  paramUseTabs = document.getElementById('param-use-tabs');
+  tabsSettingsGrid = document.getElementById('tabs-settings-grid');
+  paramTabCount = document.getElementById('param-tab-count');
+  paramTabWidth = document.getElementById('param-tab-width');
+  paramTabHeight = document.getElementById('param-tab-height');
+
+  if (paramUseTabs) {
+    paramUseTabs.addEventListener('change', () => {
+      const active = paramUseTabs.checked;
+      if (tabsSettingsGrid) {
+        tabsSettingsGrid.style.opacity = active ? '1' : '0.45';
+        tabsSettingsGrid.style.pointerEvents = active ? 'auto' : 'none';
+      }
+      saveAppState();
+    });
+  }
+  if (paramTabCount) paramTabCount.addEventListener('change', saveAppState);
+  if (paramTabWidth) paramTabWidth.addEventListener('change', saveAppState);
+  if (paramTabHeight) paramTabHeight.addEventListener('change', saveAppState);
 
   inputTableX = document.getElementById('param-table-x');
   inputTableY = document.getElementById('param-table-y');
@@ -2838,6 +2859,79 @@ function vectorizeSelectedImage() {
 }
 
 /**
+ * Calcula e interpola os waypoints de subida e descida para Abas de Fixação (Holding Tabs)
+ * Baseado no modelo determinístico de pontes do Layerling (stencilBridges.ts)
+ */
+function generateContourWithTabs(points, tabOptions, zVal, depthTotal) {
+  const { count = 4, width = 5.0, height = 1.5, enabled = true } = tabOptions;
+  if (!enabled || count <= 0 || width <= 0) {
+    return points.map(p => ({ x: p.x, y: p.y, z: zVal }));
+  }
+
+  // 1. Distâncias acumuladas ao longo do contorno
+  const dists = [0];
+  let totalLength = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const d = Math.hypot(points[i+1].x - points[i].x, points[i+1].y - points[i].y);
+    totalLength += d;
+    dists.push(totalLength);
+  }
+
+  if (totalLength < width * count * 1.2) {
+    return points.map(p => ({ x: p.x, y: p.y, z: zVal }));
+  }
+
+  // 2. Definir intervalos das abas uniformemente
+  const spacing = totalLength / count;
+  const tabIntervals = [];
+  for (let k = 0; k < count; k++) {
+    const center = (k + 0.5) * spacing;
+    const start = center - width / 2;
+    const end = center + width / 2;
+    tabIntervals.push({ start, end });
+  }
+
+  const isInsideTab = (d) => tabIntervals.some(tab => d >= tab.start - 1e-4 && d <= tab.end + 1e-4);
+  const tabZ = depthTotal + height;
+
+  // 3. Interpolar novos pontos nas fronteiras de cada aba
+  const samples = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const pA = points[i];
+    const pB = points[i + 1];
+    const dA = dists[i];
+    const dB = dists[i + 1];
+    const segLen = dB - dA;
+
+    samples.push({ x: pA.x, y: pA.y, d: dA });
+
+    const splitDists = [];
+    for (const tab of tabIntervals) {
+      if (tab.start > dA && tab.start < dB) splitDists.push(tab.start);
+      if (tab.end > dA && tab.end < dB) splitDists.push(tab.end);
+    }
+    splitDists.sort((a, b) => a - b);
+
+    for (const splitD of splitDists) {
+      const t = (splitD - dA) / (segLen || 1);
+      samples.push({
+        x: pA.x + (pB.x - pA.x) * t,
+        y: pA.y + (pB.y - pA.y) * t,
+        d: splitD
+      });
+    }
+  }
+  const lastPt = points[points.length - 1];
+  samples.push({ x: lastPt.x, y: lastPt.y, d: totalLength });
+
+  return samples.map(s => {
+    const inTab = isInsideTab(s.d);
+    const z = inTab ? Math.max(zVal, tabZ) : zVal;
+    return { x: s.x, y: s.y, z, inTab };
+  });
+}
+
+/**
  * MOTOR CAM: Gera percursos em G-code e desenha visualização 3D simulada
  */
 /**
@@ -2916,6 +3010,10 @@ function generateGCode() {
     const depthPass = parseCAMParam(inputDepthPass, 1.0);
     const materialZ = parseCAMParam(inputMaterialZ, 10.0);
     const spindleSpeed = parseCAMParam(inputSpindleSpeed, 12000);
+    const useTabs = paramUseTabs ? paramUseTabs.checked : false;
+    const tabCount = paramTabCount ? (parseInt(paramTabCount.value, 10) || 4) : 4;
+    const tabWidth = paramTabWidth ? (parseFloat(paramTabWidth.value) || 5.0) : 5.0;
+    const tabHeight = paramTabHeight ? (parseFloat(paramTabHeight.value) || 1.5) : 1.5;
 
     // Validações apenas para contornos (não se aplicam ao relevo)
     if (contourObjects.length > 0) {
@@ -3237,7 +3335,7 @@ function generateGCode() {
       // Processar cada subpath individualmente com retracção segura a Z seguro
       subpaths.forEach(subItem => {
         // Se for arco nativo circular G2 (Interpolação de Alta Suavidade)
-        if (subItem && subItem.isArcCircle) {
+        if (subItem && subItem.isArcCircle && !useTabs) {
           const { center, radius, visualPoints } = subItem;
           toolpathsToVisualise.push(visualPoints);
 
@@ -3315,7 +3413,7 @@ function generateGCode() {
         gcode.push(`G0 Z${safeZ.toFixed(3)}`);
         gcode.push(`G0 X${startPt.x.toFixed(3)} Y${startPt.y.toFixed(3)}`);
 
-        // Executar percurso completo por camadas Z
+        // Executar percurso completo por camadas Z (com suporte a Holding Tabs)
         zPasses.forEach((zVal, pIdx) => {
           // Se for contorno aberto e não for a primeira passagem, reposicionar em Z seguro antes de descer
           if (!isClosed && pIdx > 0) {
@@ -3323,12 +3421,32 @@ function generateGCode() {
             gcode.push(`G0 X${startPt.x.toFixed(3)} Y${startPt.y.toFixed(3)}`);
           }
 
-          // Mergulho vertical à taxa de avanço Z
-          gcode.push(`G1 Z${zVal.toFixed(3)} F${feedZ.toFixed(0)}`);
+          const isBottomPass = (zVal <= depthTotal + tabHeight);
+          const waypoints = (useTabs && isClosed && isBottomPass)
+            ? generateContourWithTabs(mmPoints, { enabled: true, count: tabCount, width: tabWidth, height: tabHeight }, zVal, depthTotal)
+            : mmPoints.map(p => ({ x: p.x, y: p.y, z: zVal }));
 
-          // Corte em avanço XY
-          for (let i = 1; i < mmPoints.length; i++) {
-            gcode.push(`G1 X${mmPoints[i].x.toFixed(3)} Y${mmPoints[i].y.toFixed(3)} F${feedXY.toFixed(0)}`);
+          // Mergulho vertical inicial
+          gcode.push(`G1 Z${waypoints[0].z.toFixed(3)} F${feedZ.toFixed(0)}`);
+
+          // Corte em avanço XY com rampas verticais para abas de fixação
+          for (let i = 1; i < waypoints.length; i++) {
+            const prev = waypoints[i - 1];
+            const curr = waypoints[i];
+
+            if (Math.abs(curr.z - prev.z) > 1e-4) {
+              if (curr.z > prev.z) {
+                // Subida para a ponte
+                gcode.push(`G1 Z${curr.z.toFixed(3)} F${feedZ.toFixed(0)} (Subida Aba)`);
+                gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)}`);
+              } else {
+                // Concluir topo da aba e mergulhar de volta ao corte
+                gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)}`);
+                gcode.push(`G1 Z${curr.z.toFixed(3)} F${feedZ.toFixed(0)} (Descida Corte)`);
+              }
+            } else {
+              gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)}`);
+            }
           }
         });
 
@@ -4404,6 +4522,10 @@ async function saveAppState() {
       toolType: paramToolType ? paramToolType.value : 'flat',
       stepover: inputStepover ? parseFloat(inputStepover.value) : 40,
       useArcs: paramUseArcs ? paramUseArcs.checked : true,
+      useTabs: paramUseTabs ? paramUseTabs.checked : false,
+      tabCount: paramTabCount ? parseInt(paramTabCount.value, 10) : 4,
+      tabWidth: paramTabWidth ? parseFloat(paramTabWidth.value) : 5.0,
+      tabHeight: paramTabHeight ? parseFloat(paramTabHeight.value) : 1.5,
       tableX: parseFloat(inputTableX.value),
       tableY: parseFloat(inputTableY.value),
       materialZ: parseFloat(inputMaterialZ.value),
@@ -4453,6 +4575,16 @@ async function loadAppState() {
       if (p.toolType && paramToolType) paramToolType.value = p.toolType;
       if (p.stepover !== undefined && inputStepover) inputStepover.value = p.stepover;
       if (p.useArcs !== undefined && paramUseArcs) paramUseArcs.checked = p.useArcs;
+      if (p.useTabs !== undefined && paramUseTabs) {
+        paramUseTabs.checked = p.useTabs;
+        if (tabsSettingsGrid) {
+          tabsSettingsGrid.style.opacity = p.useTabs ? '1' : '0.45';
+          tabsSettingsGrid.style.pointerEvents = p.useTabs ? 'auto' : 'none';
+        }
+      }
+      if (p.tabCount !== undefined && paramTabCount) paramTabCount.value = p.tabCount;
+      if (p.tabWidth !== undefined && paramTabWidth) paramTabWidth.value = p.tabWidth;
+      if (p.tabHeight !== undefined && paramTabHeight) paramTabHeight.value = p.tabHeight;
       if (p.spindleSpeed !== undefined && inputSpindleSpeed) inputSpindleSpeed.value = p.spindleSpeed;
       
       if (p.activeToolId && selectToolLibrary) {

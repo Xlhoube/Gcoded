@@ -6,24 +6,24 @@
   --panel-bg: rgba(17, 24, 39, 0.65);
   --panel-border: rgba(255, 255, 255, 0.05);
   --panel-border-focus: rgba(249, 115, 22, 0.3);
-  
+
   --text-main: #f3f4f6;
   --text-muted: #9ca3af;
   --text-disabled: #4b5563;
-  
+
   --accent: #f97316;
   --accent-rgb: 249, 115, 22;
   --accent-glow: rgba(249, 115, 22, 0.35);
   --accent-hover: #ea580c;
-  
+
   --danger: #ef4444;
   --danger-hover: #dc2626;
   --success: #10b981;
   --info: #3b82f6;
-  
+
   --font-main: 'Outfit', sans-serif;
   --font-mono: 'Fira Code', monospace;
-  
+
   --header-height: 70px;
 }
 
@@ -97,7 +97,9 @@ body {
 }
 
 /* BOTÕES E CONTROLOS */
-.tool-group, .action-group, .danger-group {
+.tool-group,
+.action-group,
+.danger-group {
   display: flex;
   gap: 0.6rem;
 }
@@ -162,7 +164,8 @@ button {
   box-shadow: 0 0 15px 0 rgba(239, 68, 68, 0.3);
 }
 
-button.disabled, button:disabled {
+button.disabled,
+button:disabled {
   opacity: 0.35;
   cursor: not-allowed;
   background: rgba(255, 255, 255, 0.02) !important;
@@ -275,7 +278,8 @@ button.disabled, button:disabled {
   font-weight: 500;
 }
 
-input[type="number"], select {
+input[type="number"],
+select {
   font-family: var(--font-main);
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid var(--panel-border);
@@ -287,7 +291,8 @@ input[type="number"], select {
   width: 100%;
 }
 
-input[type="number"]:focus, select:focus {
+input[type="number"]:focus,
+select:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 8px 0 rgba(249, 115, 22, 0.15);
@@ -334,7 +339,8 @@ input[type="number"]:focus, select:focus {
   transform: translateY(-1px);
 }
 
-.primary-btn:active:not(.disabled), .secondary-btn:active:not(.disabled) {
+.primary-btn:active:not(.disabled),
+.secondary-btn:active:not(.disabled) {
   transform: translateY(0);
 }
 
@@ -568,6 +574,7 @@ input[type="number"]:focus, select:focus {
   cursor: pointer;
   transition: color 0.15s ease;
 }
+
 .close-btn:hover {
   color: var(--accent);
 }
@@ -633,22 +640,26 @@ input[type="number"]:focus, select:focus {
   background: rgba(255, 255, 255, 0.05);
   color: #fff;
 }
+
 .action-btn-sm.delete {
   background: rgba(239, 68, 68, 0.15);
   color: #f87171;
   border-color: rgba(239, 68, 68, 0.2);
 }
+
 .action-btn-sm.delete:hover {
   background: rgba(239, 68, 68, 0.3);
   color: #fff;
   border-color: #ef4444;
 }
+
 .action-btn-sm.use {
   background: rgba(249, 115, 22, 0.15);
   color: #fdba74;
   border-color: rgba(249, 115, 22, 0.2);
   margin-right: 0.25rem;
 }
+
 .action-btn-sm.use:hover {
   background: var(--accent);
   color: #fff;
@@ -664,6 +675,7 @@ input[type="number"]:focus, select:focus {
   margin-top: 2px;
   padding-top: 6px;
 }
+
 #context-menu ul li.ctx-danger:hover {
   background: rgba(239, 68, 68, 0.15);
   color: #fff;
@@ -677,6 +689,7 @@ input[type="number"]:focus, select:focus {
   border-color: rgba(139, 92, 246, 0.4);
   color: #a78bfa;
 }
+
 .relief-btn:hover {
   background: linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(139, 92, 246, 0.35));
   border-color: #8b5cf6;
@@ -768,6 +781,7 @@ input[type="number"]:focus, select:focus {
   outline: none;
   cursor: pointer;
 }
+
 .relief-control-row input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
@@ -778,6 +792,7 @@ input[type="number"]:focus, select:focus {
   cursor: pointer;
   transition: background 0.2s ease;
 }
+
 .relief-control-row input[type="range"]::-webkit-slider-thumb:hover {
   background: #a78bfa;
 }
@@ -814,6 +829,7 @@ input[type="number"]:focus, select:focus {
   outline: none;
   transition: border-color 0.2s;
 }
+
 .relief-dim-group input[type="number"]:focus {
   border-color: #8b5cf6;
 }
@@ -835,10 +851,12 @@ input[type="number"]:focus, select:focus {
   padding: 0;
   line-height: 1;
 }
+
 .lock-aspect-btn:hover {
   background: rgba(139, 92, 246, 0.25);
   border-color: #8b5cf6;
 }
+
 .lock-aspect-btn[data-locked="false"] {
   background: rgba(100, 116, 139, 0.12);
   border-color: rgba(100, 116, 139, 0.3);
@@ -991,6 +1009,7 @@ input[type="number"]:focus, select:focus {
   transition: all 0.25s ease;
   box-shadow: 0 0 10px rgba(236, 72, 153, 0.15);
 }
+
 .btn-auto-tune:hover {
   background: linear-gradient(135deg, rgba(236, 72, 153, 0.35), rgba(139, 92, 246, 0.45));
   border-color: #ec4899;
@@ -998,6 +1017,7 @@ input[type="number"]:focus, select:focus {
   box-shadow: 0 0 16px rgba(236, 72, 153, 0.4);
   transform: translateY(-1px);
 }
+
 .btn-auto-tune:active {
   transform: translateY(0);
 }
@@ -1154,7 +1174,8 @@ input[type="number"]:focus, select:focus {
   transform: translateY(-1px);
 }
 
-.sim-speed-group, .sim-views-group {
+.sim-speed-group,
+.sim-views-group {
   display: flex;
   align-items: center;
   gap: 0.35rem;
@@ -1350,12 +1371,19 @@ input[type="number"]:focus, select:focus {
 }
 
 @keyframes pulseGlow {
-  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-  70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+
+  70% {
+    box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
 }
 
 .btn-pulsing {
   animation: pulseGlow 1.8s infinite;
 }
-
