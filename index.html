@@ -60,6 +60,10 @@
           title="Converter imagem raster selecionada em contorno vetorial" disabled>
           ⚡ Vetorizar
         </button>
+        <button id="btn-ungroup" class="action-btn disabled"
+          title="Desagrupar contornos ou separar cavidades do desenho selecionado (DXF/SVG)" disabled>
+          🧩 Desagrupar
+        </button>
         <input type="file" id="file-import-3d" accept=".png,.jpg,.jpeg,.webp" style="display: none;">
         <button id="btn-import-3d" class="action-btn relief-btn"
           title="Importar fotografia para Corte 3D por Relevo (Grayscale Relief Carving)">
@@ -235,6 +239,7 @@
                 <option value="flat">🟦 Topo Plano (End Mill)</option>
                 <option value="ball">🟣 Esférica (Ball Nose)</option>
                 <option value="vbit">🔺 Cónica / V-Bit (60°/90°)</option>
+                <option value="chamfer">📐 Fresa de Chanfro (Chamfer Mill 45°/90°)</option>
                 <option value="surfacing">🟫 Aplanar Mesa (Flycutter)</option>
               </select>
             </div>
@@ -295,8 +300,44 @@
               <option value="outside" selected>Exterior (Perfil / Profile) - Compensação +R</option>
               <option value="inside">Interior (Perfil / Furo) - Compensação -R</option>
               <option value="pocket">Caixa / Pocket (Desbaste Concêntrico)</option>
+              <option value="chamfer">📐 Chanfro nas Arestas (Chamfer / Bisel)</option>
               <option value="on">Sobre a Linha (Gravação / Engrave)</option>
             </select>
+          </div>
+          <!-- Parâmetros de Chanfro nas Arestas (Chamfer) -->
+          <div id="chamfer-settings-grid" style="display: none; margin-top: 0.6rem; padding: 0.6rem; background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 6px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem;">
+              <span style="font-size: 0.82rem; font-weight: 600; color: #c084fc;">📐 Configuração do Chanfro</span>
+              <span id="lbl-chamfer-depth-calc" style="font-size: 0.75rem; color: #a855f7; font-family: monospace;">Z = -1.50 mm</span>
+            </div>
+            <div class="input-grid">
+              <div class="input-field">
+                <label for="param-chamfer-width">Largura Chanfro (mm)</label>
+                <input type="number" id="param-chamfer-width" value="1.0" min="0.1" max="10.0" step="0.1">
+              </div>
+              <div class="input-field">
+                <label for="param-chamfer-angle">Ângulo Fresa (°)</label>
+                <select id="param-chamfer-angle">
+                  <option value="90" selected>90° (Bisel 45°)</option>
+                  <option value="60">60° (Bisel 30°)</option>
+                  <option value="120">120° (Bisel 60°)</option>
+                </select>
+              </div>
+            </div>
+            <div class="input-grid" style="margin-top: 0.4rem;">
+              <div class="input-field">
+                <label for="param-chamfer-side">Aresta de Aplicação</label>
+                <select id="param-chamfer-side">
+                  <option value="outside" selected>Aresta Exterior (Peça)</option>
+                  <option value="inside">Aresta Interior (Cavidade)</option>
+                  <option value="on">Centrado na Aresta</option>
+                </select>
+              </div>
+              <div class="input-field">
+                <label for="param-chamfer-tip-offset">Folga Ponta (mm)</label>
+                <input type="number" id="param-chamfer-tip-offset" value="0.5" min="0.0" max="3.0" step="0.1" title="Desce a fresa além da ponta para cortar com a lâmina lateral afiada">
+              </div>
+            </div>
           </div>
           <div class="checkbox-field" style="margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
             <input type="checkbox" id="param-use-arcs" checked
@@ -849,8 +890,14 @@
   <div id="context-menu" class="context-menu" style="display: none; position: fixed; z-index: 9999;">
     <ul>
       <li id="ctx-send-to-origin">📍 Enviar para Origem da Mesa</li>
+      <li id="ctx-strategy-pocket">🟩 Atribuir: Desbaste Interior (Pocket)</li>
+      <li id="ctx-strategy-chamfer">🟪 Atribuir: Chanfro nas Arestas (Bisel)</li>
+      <li id="ctx-strategy-outside">🟦 Atribuir: Perfil Exterior (+R)</li>
+      <li id="ctx-strategy-inside">🟧 Atribuir: Perfil Interior (-R)</li>
+      <li id="ctx-strategy-on">🌸 Atribuir: Sobre a Linha (Engrave)</li>
+      <li id="ctx-split-subpaths" style="display:none;">✂️ Separar Contornos / Cavidades</li>
       <li id="ctx-group" style="display:none;">📦 Agrupar Selecção</li>
-      <li id="ctx-ungroup" style="display:none;">📤 Desagrupar</li>
+      <li id="ctx-ungroup" style="display:none;">📤 Desagrupar Contornos</li>
       <li id="ctx-delete" class="ctx-danger">🗑️ Apagar Objecto</li>
     </ul>
   </div>

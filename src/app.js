@@ -34,7 +34,12 @@ let btnInstallApp, btnModalInstallAction, installModal, btnCloseInstall, btnClos
 let inputToolDia, inputSafeZ, inputFeedXY, inputFeedZ, inputDepthTotal, inputDepthPass, selectStrategy;
 let inputTableX, inputTableY, inputMaterialZ, selectOriginType, inputWcsX, inputWcsY;
 let contextMenu, ctxSendToOrigin, ctxDelete, ctxGroup, ctxUngroup;
+let ctxStrategyPocket, ctxStrategyChamfer, ctxStrategyOutside, ctxStrategyInside, ctxStrategyOn, ctxSplitSubpaths;
 let rightClickedObject = null;
+let btnUngroup = null;
+
+// Parâmetros de Chanfro nas Arestas (Chamfer)
+let inputChamferWidth, paramChamferAngle, paramChamferSide, paramChamferTipOffset, chamferSettingsGrid, lblChamferDepthCalc;
 
 // Biblioteca de Ferramentas (100% Fresas para CNC Router)
 let selectToolLibrary, btnOpenToolManager;
@@ -45,6 +50,7 @@ const DEFAULT_TOOLS = [
   { id: 'flat-2000', name: 'Fresa Topo Plano 2.0mm (Detalhes & Canais)', toolType: 'flat', toolDia: 2.0, safeZ: 4.0, feedXY: 900, feedZ: 300, depthPass: 0.8, stepover: 35, spindleSpeed: 20000 },
   { id: 'ball-3175', name: 'Fresa Esférica 3.175mm (Relevos 3D & Acabamento)', toolType: 'ball', toolDia: 3.175, safeZ: 5.0, feedXY: 1600, feedZ: 500, depthPass: 1.5, stepover: 15, spindleSpeed: 20000 },
   { id: 'ball-1500', name: 'Fresa Esférica 1.5mm (Relevo Alta Definição)', toolType: 'ball', toolDia: 1.5, safeZ: 4.0, feedXY: 1000, feedZ: 300, depthPass: 0.8, stepover: 10, spindleSpeed: 24000 },
+  { id: 'chamfer-90-12', name: 'Fresa de Chanfro 90° 12mm (Bisel 45° nas Arestas)', toolType: 'chamfer', toolDia: 12.0, safeZ: 5.0, feedXY: 1500, feedZ: 400, depthPass: 1.5, stepover: 30, spindleSpeed: 16000, chamferWidth: 1.0, chamferAngle: 90, chamferTipOffset: 0.5 },
   { id: 'vbit-60-6', name: 'Fresa V-Bit 60° 6mm (Gravação & Chanfro)', toolType: 'vbit', toolDia: 6.0, safeZ: 5.0, feedXY: 1200, feedZ: 350, depthPass: 1.5, stepover: 30, spindleSpeed: 18000 },
   { id: 'vbit-90-12', name: 'Fresa V-Bit 90° 12mm (Entalhes V-Carve)', toolType: 'vbit', toolDia: 12.0, safeZ: 5.0, feedXY: 1400, feedZ: 400, depthPass: 2.0, stepover: 30, spindleSpeed: 16000 },
   { id: 'surf-25000', name: 'Fresa de Aplanar 25mm (Faceamento da Mesa)', toolType: 'surfacing', toolDia: 25.0, safeZ: 5.0, feedXY: 2500, feedZ: 400, depthPass: 0.5, stepover: 60, spindleSpeed: 14000 }
@@ -160,6 +166,13 @@ function cacheUIElements() {
   ctxDelete = document.getElementById('ctx-delete');
   ctxGroup = document.getElementById('ctx-group');
   ctxUngroup = document.getElementById('ctx-ungroup');
+  ctxStrategyPocket = document.getElementById('ctx-strategy-pocket');
+  ctxStrategyChamfer = document.getElementById('ctx-strategy-chamfer');
+  ctxStrategyOutside = document.getElementById('ctx-strategy-outside');
+  ctxStrategyInside = document.getElementById('ctx-strategy-inside');
+  ctxStrategyOn = document.getElementById('ctx-strategy-on');
+  ctxSplitSubpaths = document.getElementById('ctx-split-subpaths');
+  btnUngroup = document.getElementById('btn-ungroup');
 
   // Inputs e Parâmetros da Fresa (CNC Router)
   inputToolDia = document.getElementById('param-tool-dia');
@@ -169,6 +182,14 @@ function cacheUIElements() {
   inputDepthTotal = document.getElementById('param-depth-total');
   inputDepthPass = document.getElementById('param-depth-pass');
   selectStrategy = document.getElementById('param-strategy');
+
+  // Parâmetros de Chanfro nas Arestas (Chamfer)
+  inputChamferWidth = document.getElementById('param-chamfer-width');
+  paramChamferAngle = document.getElementById('param-chamfer-angle');
+  paramChamferSide = document.getElementById('param-chamfer-side');
+  paramChamferTipOffset = document.getElementById('param-chamfer-tip-offset');
+  chamferSettingsGrid = document.getElementById('chamfer-settings-grid');
+  lblChamferDepthCalc = document.getElementById('lbl-chamfer-depth-calc');
   paramToolType = document.getElementById('param-tool-type');
   inputStepover = document.getElementById('param-stepover');
   paramUseArcs = document.getElementById('param-use-arcs');
@@ -1855,6 +1876,47 @@ function setupEventListeners() {
     hideContextMenu();
   });
 
+  if (ctxStrategyPocket) {
+    ctxStrategyPocket.addEventListener('click', () => {
+      setRightClickedObjectStrategy('pocket');
+      hideContextMenu();
+    });
+  }
+  if (ctxStrategyChamfer) {
+    ctxStrategyChamfer.addEventListener('click', () => {
+      setRightClickedObjectStrategy('chamfer');
+      hideContextMenu();
+    });
+  }
+  if (ctxStrategyOutside) {
+    ctxStrategyOutside.addEventListener('click', () => {
+      setRightClickedObjectStrategy('outside');
+      hideContextMenu();
+    });
+  }
+  if (ctxStrategyInside) {
+    ctxStrategyInside.addEventListener('click', () => {
+      setRightClickedObjectStrategy('inside');
+      hideContextMenu();
+    });
+  }
+  if (ctxStrategyOn) {
+    ctxStrategyOn.addEventListener('click', () => {
+      setRightClickedObjectStrategy('on');
+      hideContextMenu();
+    });
+  }
+  if (ctxSplitSubpaths) {
+    ctxSplitSubpaths.addEventListener('click', () => {
+      if (rightClickedObject) splitPathSubpaths(rightClickedObject);
+      hideContextMenu();
+    });
+  }
+
+  if (btnUngroup) {
+    btnUngroup.addEventListener('click', ungroupSelectedObject);
+  }
+
   ctxDelete.addEventListener('click', () => {
     if (rightClickedObject) {
       canvas.setActiveObject(rightClickedObject);
@@ -1868,6 +1930,43 @@ function setupEventListeners() {
     if (opt.e.button === 0) hideContextMenu();
   });
   canvas.on('mouse:wheel', hideContextMenu);
+
+  // Listener para selectStrategy
+  if (selectStrategy) {
+    selectStrategy.addEventListener('change', () => {
+      const val = selectStrategy.value;
+      toggleChamferSettings(val === 'chamfer');
+
+      const activeObj = canvas.getActiveObject();
+      if (activeObj && !activeObj.isVisualPath && !activeObj.isOriginMarker) {
+        if (activeObj.type === 'activeSelection') {
+          activeObj.forEachObject(child => applyStrategyToObject(child, val));
+        } else {
+          applyStrategyToObject(activeObj, val);
+        }
+        canvas.requestRenderAll();
+        saveAppState();
+        clearVisualToolpaths();
+        showCamToast(`🎨 Contorno definido como: ${getStrategyLabel(val)}`);
+      }
+    });
+  }
+
+  // Listeners para parâmetros de Chanfro
+  [inputChamferWidth, paramChamferAngle, paramChamferSide, paramChamferTipOffset].forEach(el => {
+    if (el) {
+      el.addEventListener('input', () => {
+        updateChamferPreview();
+        clearVisualToolpaths();
+        saveAppState();
+      });
+      el.addEventListener('change', () => {
+        updateChamferPreview();
+        clearVisualToolpaths();
+        saveAppState();
+      });
+    }
+  });
   
   // Guardar estado quando os parâmetros de corte mudam
   const params = [inputToolDia, inputSafeZ, inputFeedXY, inputFeedZ, inputDepthTotal, inputDepthPass, selectStrategy, inputMaterialZ, paramToolType, inputStepover, paramUseArcs, inputSpindleSpeed];
@@ -1893,6 +1992,20 @@ function setupEventListeners() {
       if (paramToolType) paramToolType.value = tool.toolType || 'flat';
       if (inputStepover) inputStepover.value = tool.stepover || 40;
       if (inputSpindleSpeed) inputSpindleSpeed.value = tool.spindleSpeed || 18000;
+
+      // Se a ferramenta for de chanfro, auto-configurar a estratégia
+      if (tool.toolType === 'chamfer') {
+        if (selectStrategy) selectStrategy.value = 'chamfer';
+        toggleChamferSettings(true);
+        if (tool.chamferAngle && paramChamferAngle) paramChamferAngle.value = tool.chamferAngle;
+        if (tool.chamferWidth && inputChamferWidth) inputChamferWidth.value = tool.chamferWidth;
+        if (tool.chamferTipOffset && paramChamferTipOffset) paramChamferTipOffset.value = tool.chamferTipOffset;
+        updateChamferPreview();
+      } else if (selectStrategy && selectStrategy.value === 'chamfer') {
+        toggleChamferSettings(true);
+      } else {
+        toggleChamferSettings(false);
+      }
       
       clearVisualToolpaths();
       saveAppState();
@@ -2409,7 +2522,7 @@ function handleCanvasMouseMoveForPan(options) {
 function updateSelectionState() {
   const activeObject = canvas.getActiveObject();
   
-  if (activeObject && !activeObject.isVisualPath) {
+  if (activeObject && !activeObject.isVisualPath && !activeObject.isOriginMarker) {
     btnDelete.classList.remove('disabled');
     btnDelete.removeAttribute('disabled');
     
@@ -2421,12 +2534,35 @@ function updateSelectionState() {
       btnVectorize.classList.add('disabled');
       btnVectorize.setAttribute('disabled', 'true');
     }
+
+    // Gerir disponibilidade do botão de Desagrupar
+    const canUngroup = activeObject.type === 'group' || (activeObject.type === 'path' && hasMultipleSubpaths(activeObject));
+    if (btnUngroup) {
+      if (canUngroup) {
+        btnUngroup.classList.remove('disabled');
+        btnUngroup.removeAttribute('disabled');
+      } else {
+        btnUngroup.classList.add('disabled');
+        btnUngroup.setAttribute('disabled', 'true');
+      }
+    }
+
+    // Sincronizar o dropdown de estratégia com a estratégia do contorno selecionado
+    if (activeObject.camStrategy && selectStrategy) {
+      selectStrategy.value = activeObject.camStrategy;
+      toggleChamferSettings(activeObject.camStrategy === 'chamfer');
+    }
   } else {
     btnDelete.classList.add('disabled');
     btnDelete.setAttribute('disabled', 'true');
     
     btnVectorize.classList.add('disabled');
     btnVectorize.setAttribute('disabled', 'true');
+
+    if (btnUngroup) {
+      btnUngroup.classList.add('disabled');
+      btnUngroup.setAttribute('disabled', 'true');
+    }
   }
 }
 
@@ -3023,34 +3159,87 @@ function processImportedFile(file) {
           return;
         }
 
-        // Unir todos os contornos num único Path com múltiplos subcaminhos
-        const unifiedD = result.svgPaths.join(' ');
-        const pathObj = new fabric.Path(unifiedD, {
-          stroke: '#38bdf8',
-          fill: '',
-          strokeWidth: 1.5,
-          strokeUniform: true
-        });
+        if (result.svgPaths.length === 1) {
+          const pathObj = new fabric.Path(result.svgPaths[0], {
+            stroke: '#38bdf8',
+            fill: '',
+            strokeWidth: 1.5,
+            strokeUniform: true,
+            camStrategy: 'outside'
+          });
 
-        // Se exceder a mesa de corte, redimensionar proporcionalmente
-        const maxAllowedW = canvas.width * 0.9;
-        const maxAllowedH = canvas.height * 0.9;
-        if (pathObj.width > maxAllowedW || pathObj.height > maxAllowedH) {
-          pathObj.scaleToWidth(Math.min(maxAllowedW, maxAllowedH));
+          const maxAllowedW = canvas.width * 0.9;
+          const maxAllowedH = canvas.height * 0.9;
+          if (pathObj.width > maxAllowedW || pathObj.height > maxAllowedH) {
+            pathObj.scaleToWidth(Math.min(maxAllowedW, maxAllowedH));
+          }
+
+          pathObj.set({
+            left: (canvas.width - pathObj.getScaledWidth()) / 2,
+            top: (canvas.height - pathObj.getScaledHeight()) / 2
+          });
+
+          canvas.add(pathObj);
+          canvas.setActiveObject(pathObj);
+          canvas.requestRenderAll();
+          saveAppState();
+
+          showCamToast(`📐 DXF importado: 1 contorno! Clica na forma para definir a estratégia.`);
+        } else {
+          // Múltiplos contornos (ex: contorno exterior e cavidades interiores de desbaste)
+          const pathObjs = result.svgPaths.map(dStr => {
+            return new fabric.Path(dStr, {
+              fill: '',
+              strokeWidth: 1.5,
+              strokeUniform: true
+            });
+          });
+
+          // Determinar o contorno exterior (o de maior área de bounding box)
+          let maxArea = -1;
+          let outerIdx = 0;
+          pathObjs.forEach((p, idx) => {
+            const area = (p.width || 1) * (p.height || 1);
+            if (area > maxArea) {
+              maxArea = area;
+              outerIdx = idx;
+            }
+          });
+
+          pathObjs.forEach((p, idx) => {
+            if (idx === outerIdx) {
+              p.set({ stroke: '#38bdf8' }); // Azul ciano para perfil exterior
+              p.camStrategy = 'outside';
+              p.camRole = 'exterior';
+            } else {
+              p.set({ stroke: '#10b981' }); // Verde esmeralda para desbaste de cavidades/pockets
+              p.camStrategy = 'pocket';
+              p.camRole = 'pocket';
+            }
+          });
+
+          const group = new fabric.Group(pathObjs, {
+            strokeUniform: true
+          });
+
+          const maxAllowedW = canvas.width * 0.9;
+          const maxAllowedH = canvas.height * 0.9;
+          if (group.width > maxAllowedW || group.height > maxAllowedH) {
+            group.scaleToWidth(Math.min(maxAllowedW, maxAllowedH));
+          }
+
+          group.set({
+            left: (canvas.width - group.getScaledWidth()) / 2,
+            top: (canvas.height - group.getScaledHeight()) / 2
+          });
+
+          canvas.add(group);
+          canvas.setActiveObject(group);
+          canvas.requestRenderAll();
+          saveAppState();
+
+          showCamToast(`📐 DXF importado: 1 perfil exterior (#38bdf8) e ${pathObjs.length - 1} cavidade(s) para desbaste (#10b981)! Clica em "🧩 Desagrupar" para editar individualmente.`);
         }
-
-        // Posicionar no centro da mesa
-        pathObj.set({
-          left: (canvas.width - pathObj.getScaledWidth()) / 2,
-          top: (canvas.height - pathObj.getScaledHeight()) / 2
-        });
-
-        canvas.add(pathObj);
-        canvas.setActiveObject(pathObj);
-        canvas.requestRenderAll();
-        saveAppState();
-
-        showCamToast(`📐 DXF importado: ${result.totalLoops} contorno(s) fechado(s), ${result.totalOpen} aberto(s)!`);
       } catch (err) {
         console.error("Erro ao importar DXF:", err);
         alert(`Erro ao processar ficheiro DXF: ${err.message}`);
@@ -3704,6 +3893,29 @@ function generateGCode() {
     const toolRadius = toolDia / 2;
     const stepover = inputStepover ? (parseFloat(inputStepover.value) || 40) : 40;
 
+    // Parâmetros de Chanfro (Chamfer Mill / Bisel)
+    const chamferWidth = inputChamferWidth ? (parseFloat(inputChamferWidth.value) || 1.0) : 1.0;
+    const chamferAngle = paramChamferAngle ? (parseFloat(paramChamferAngle.value) || 90) : 90;
+    const chamferSide = paramChamferSide ? paramChamferSide.value : 'outside';
+    const chamferTipOffset = paramChamferTipOffset ? (parseFloat(paramChamferTipOffset.value) || 0.5) : 0.5;
+
+    const halfAngleRad = (chamferAngle / 2) * (Math.PI / 180);
+    const tanHalf = Math.tan(halfAngleRad) || 1.0;
+    const chamferZCut = -(chamferWidth / tanHalf + chamferTipOffset);
+
+    // Desfasamento horizontal da fresa cónica para posicionar a faca de chanfro:
+    // Exterior: a fresa desloca-se para fora (+tipOffset * tan(alpha))
+    // Interior (cavidade/furo): a fresa desloca-se para dentro (-tipOffset * tan(alpha))
+    // Sobre a linha: 0
+    let chamferOffset = 0;
+    if (chamferSide === 'outside') {
+      chamferOffset = chamferTipOffset * tanHalf;
+    } else if (chamferSide === 'inside') {
+      chamferOffset = -(chamferTipOffset * tanHalf);
+    } else {
+      chamferOffset = 0;
+    }
+
     // Validações apenas para contornos (não se aplicam ao relevo)
     if (contourObjects.length > 0) {
       if (depthTotal >= 0) {
@@ -3904,27 +4116,59 @@ function generateGCode() {
       });
     }
 
-    // 4B. Processar Geometria de contornos normais (rectângulos, círculos, linhas, SVG)
+    // 4B. PROCESSAR GEOMETRIA DE CONTORNOS (Multi-Estratégia: Perfil, Desbaste / Pocket e Chanfro)
+    // Expandir grupos para garantir que contornos individuais (ex: perfil exterior vs cavidades de DXF)
+    // sejam processados com a sua estratégia específica (obj.camStrategy ou global)
+    const contourItems = [];
+    contourObjects.forEach(obj => {
+      if (obj.type === 'group' && obj.getObjects) {
+        const groupMatrix = obj.calcTransformMatrix();
+        const children = obj.getObjects();
+        children.forEach(child => {
+          contourItems.push({
+            obj: child,
+            parentGroup: obj,
+            groupMatrix: groupMatrix,
+            camStrategy: child.camStrategy || obj.camStrategy || strategy
+          });
+        });
+      } else {
+        contourItems.push({
+          obj: obj,
+          parentGroup: null,
+          groupMatrix: null,
+          camStrategy: obj.camStrategy || strategy
+        });
+      }
+    });
 
-    // 4. Processar Geometria de cada objecto de contorno no Canvas
-    contourObjects.forEach((obj, idx) => {
-      // Um objecto pode gerar múltiplos subpercursos (ex: letras com buracos interiores ou SVG com múltiplos paths)
+    contourItems.forEach((item) => {
+      const obj = item.obj;
+      const curStrategy = item.camStrategy || strategy;
+      const matrix = item.parentGroup 
+        ? fabric.util.multiplyTransformMatrices(item.groupMatrix, obj.calcTransformMatrix())
+        : obj.calcTransformMatrix();
+
       let subpaths = [];
 
       // --- CASO 1: RETÂNGULO ---
       if (obj.type === 'rect') {
-        const m = obj.calcTransformMatrix();
         const hw = obj.width / 2;
         const hh = obj.height / 2;
         const pts = [
           { x: -hw, y: -hh }, { x: hw, y: -hh }, { x: hw, y: hh }, { x: -hw, y: hh }, { x: -hw, y: -hh }
-        ].map(p => fabric.util.transformPoint(new fabric.Point(p.x, p.y), m));
+        ].map(p => fabric.util.transformPoint(new fabric.Point(p.x, p.y), matrix));
+        pts.camStrategy = curStrategy;
         subpaths.push(pts);
       }
-      // --- CASO 2: CÍRCULO (FASE 2: ARCOS NATIVOS G2/G3 COM VETORES I, J) ---
+      // --- CASO 2: CÍRCULO ---
       else if (obj.type === 'circle') {
-        const center = obj.getCenterPoint();
-        const radius = obj.radius * (obj.scaleX || 1);
+        const scaleFactor = (obj.scaleX || 1) * (item.parentGroup ? (item.parentGroup.scaleX || 1) : 1);
+        const radius = obj.radius * scaleFactor;
+        const localCenter = obj.getCenterPoint();
+        const center = item.parentGroup 
+          ? fabric.util.transformPoint(localCenter, item.groupMatrix)
+          : localCenter;
         const useArcs = paramUseArcs ? paramUseArcs.checked : true;
 
         const steps = 64;
@@ -3935,13 +4179,15 @@ function generateGCode() {
           const py = center.y + radius * Math.sin(theta);
           pts.push({ x: px, y: py });
         }
+        pts.camStrategy = curStrategy;
 
         if (useArcs) {
           subpaths.push({
             isArcCircle: true,
             center,
             radius,
-            visualPoints: pts
+            visualPoints: pts,
+            camStrategy: curStrategy
           });
         } else {
           subpaths.push(pts);
@@ -3949,15 +4195,15 @@ function generateGCode() {
       }
       // --- CASO 3: LINHA ---
       else if (obj.type === 'line') {
-        const m = obj.calcTransformMatrix();
         const lp = obj.calcLinePoints();
         const pts = [
-          fabric.util.transformPoint(new fabric.Point(lp.x1, lp.y1), m),
-          fabric.util.transformPoint(new fabric.Point(lp.x2, lp.y2), m)
+          fabric.util.transformPoint(new fabric.Point(lp.x1, lp.y1), matrix),
+          fabric.util.transformPoint(new fabric.Point(lp.x2, lp.y2), matrix)
         ];
+        pts.camStrategy = curStrategy;
         subpaths.push(pts);
       }
-      // --- CASO 4: CAMINHO / SVG / GRUPO ---
+      // --- CASO 4: PATH / SVG ---
       else {
         const svgNS = "http://www.w3.org/2000/svg";
         const tempSvg = document.createElementNS(svgNS, "svg");
@@ -3965,7 +4211,6 @@ function generateGCode() {
 
         const dStrings = [];
         if (obj.type === 'path') {
-          // Separar subpaths em comandos 'M'/'m' distintos se existirem
           const pathCommands = obj.path;
           let currentD = [];
           for (let c = 0; c < pathCommands.length; c++) {
@@ -3980,7 +4225,6 @@ function generateGCode() {
             dStrings.push(currentD.map(p => p.join(' ')).join(' '));
           }
         } else {
-          // Se for grupo SVG, extrair todos os paths individuais
           const svgString = obj.toSVG();
           const parser = new DOMParser();
           const doc = parser.parseFromString(svgString, 'image/svg+xml');
@@ -3991,7 +4235,6 @@ function generateGCode() {
           });
         }
 
-        const matrix = obj.calcTransformMatrix();
         dStrings.forEach(dStr => {
           if (!dStr.trim()) return;
           const tempPath = document.createElementNS(svgNS, "path");
@@ -4009,7 +4252,10 @@ function generateGCode() {
                 const transformedPt = fabric.util.transformPoint({ x: pt.x, y: pt.y }, matrix);
                 pts.push(transformedPt);
               }
-              if (pts.length > 0) subpaths.push(pts);
+              if (pts.length > 0) {
+                pts.camStrategy = curStrategy;
+                subpaths.push(pts);
+              }
             }
           } catch (e) {
             console.warn("Erro ao ler subpath SVG:", e);
@@ -4021,23 +4267,40 @@ function generateGCode() {
         document.body.removeChild(tempSvg);
       }
 
-      // Processar cada subpath aplicando a Estratégia CAM (Exterior, Interior ou Pocket)
+      // Processar cada subpath aplicando a respetiva Estratégia CAM
       subpaths.forEach(subItem => {
-        const wcsX = parseCAMParam(inputWcsX, 250);
-        const wcsY = parseCAMParam(inputWcsY, 250);
+        const itemStrategy = (subItem && subItem.camStrategy) || curStrategy;
 
-        // 1. CÍRCULO COM ARCOS NATIVOS G2 (quando tabs não estão ativos e não é pocket)
-        if (subItem && subItem.isArcCircle && !useTabs && strategy !== 'pocket') {
+        // Determinar cor da trajetória visual correspondente à estratégia
+        let toolpathColor = '#38bdf8'; // Azul ciano padrão
+        if (itemStrategy === 'pocket') {
+          toolpathColor = '#10b981'; // Verde esmeralda para desbaste
+        } else if (itemStrategy === 'chamfer') {
+          toolpathColor = '#a855f7'; // Roxo para chanfro
+        } else if (itemStrategy === 'inside') {
+          toolpathColor = '#f59e0b'; // Âmbar para corte interior
+        } else if (itemStrategy === 'on') {
+          toolpathColor = '#ec4899'; // Rosa para sobre a linha
+        }
+
+        // 1. CÍRCULO COM ARCOS NATIVOS G2 (quando tabs não estão activos e não é pocket)
+        if (subItem && subItem.isArcCircle && !useTabs && itemStrategy !== 'pocket') {
           const { center, radius } = subItem;
 
           const cxMM = (center.x / ESCALA_MM_PX) - wcsX;
           const cyMM = ((canvas.height - center.y) / ESCALA_MM_PX) - wcsY;
           const rBaseMM = radius / ESCALA_MM_PX;
 
-          // Compensação de raio no círculo
           let rCut = rBaseMM;
-          if (strategy === 'outside') rCut = rBaseMM + toolRadius;
-          else if (strategy === 'inside') rCut = Math.max(0.1, rBaseMM - toolRadius);
+          let targetDepth = depthTotal;
+          if (itemStrategy === 'outside') {
+            rCut = rBaseMM + toolRadius;
+          } else if (itemStrategy === 'inside') {
+            rCut = Math.max(0.1, rBaseMM - toolRadius);
+          } else if (itemStrategy === 'chamfer') {
+            targetDepth = chamferZCut;
+            rCut = Math.max(0.1, rBaseMM + chamferOffset);
+          }
 
           // Amostragem para renderização visual no canvas 2D
           const visPts = [];
@@ -4048,18 +4311,18 @@ function generateGCode() {
               y: canvas.height - ((cyMM + rCut * Math.sin(theta) + wcsY) * ESCALA_MM_PX)
             });
           }
-          toolpathsToVisualise.push(visPts);
+          toolpathsToVisualise.push({ points: visPts, color: toolpathColor });
 
           const startX = cxMM - rCut;
           const startY = cyMM;
 
           const zPasses = [];
           let currentZ = -depthPass;
-          while (currentZ > depthTotal) {
+          while (currentZ > targetDepth) {
             zPasses.push(currentZ);
             currentZ -= depthPass;
           }
-          zPasses.push(depthTotal);
+          zPasses.push(targetDepth);
 
           gcode.push(`G0 Z${safeZ.toFixed(3)}`);
           gcode.push(`G0 X${startX.toFixed(3)} Y${startY.toFixed(3)}`);
@@ -4075,7 +4338,7 @@ function generateGCode() {
         }
 
         // 2. CONTORNOS POLIGONAIS, RETÂNGULOS, DXF E SVGs
-        const rawPoints = (subItem && subItem.isArcCircle) ? subItem.visualPoints : subItem;
+        const rawPoints = (subItem && subItem.isArcCircle) ? subItem.visualPoints : (subItem.points || subItem);
         if (!rawPoints || rawPoints.length < 2) return;
 
         // Converter pontos em coordenadas físicas de maquinação (mm)
@@ -4089,45 +4352,53 @@ function generateGCode() {
 
         // Gerar os laços de corte (loops) consoante a estratégia seleccionada
         let loopsToCut = [];
-        if (!isClosed || strategy === 'on') {
+        let targetDepth = depthTotal;
+
+        if (itemStrategy === 'chamfer') {
+          targetDepth = chamferZCut;
+          if (!isClosed || Math.abs(chamferOffset) < 1e-4) {
+            loopsToCut = [mmPoints];
+          } else {
+            loopsToCut = offsetContour(mmPoints, chamferOffset);
+            if (!loopsToCut || loopsToCut.length === 0) loopsToCut = [mmPoints];
+          }
+        } else if (!isClosed || itemStrategy === 'on') {
           loopsToCut = [mmPoints];
-        } else if (strategy === 'outside') {
-          // Compensação Exterior (+R): peça final fica com dimensão exacta
+        } else if (itemStrategy === 'outside') {
           loopsToCut = offsetContour(mmPoints, toolRadius);
-        } else if (strategy === 'inside') {
-          // Compensação Interior (-R): cavidade/furo fica com dimensão exacta
+        } else if (itemStrategy === 'inside') {
           loopsToCut = offsetContour(mmPoints, -toolRadius);
-        } else if (strategy === 'pocket') {
-          // Desbaste Concêntrico Total de Caixa
+        } else if (itemStrategy === 'pocket') {
+          // Desbaste Concêntrico Total de Caixa / Cavidade
           loopsToCut = generatePocketToolpaths(mmPoints, toolDia, stepover);
-          if (loopsToCut.length === 0) loopsToCut = [mmPoints];
+          if (!loopsToCut || loopsToCut.length === 0) loopsToCut = [mmPoints];
         }
 
         // REA FreeCAD DogboneII & Vectric VCarve:
-        // Se ativado pelo utilizador, aplicar alívios de cantos nos cantos internos
+        // Se ativado, aplicar alívios de cantos nos cantos internos (apenas em corte de perfil)
         const useDogbone = paramUseDogbone && paramUseDogbone.checked;
         const dogboneType = paramDogboneType ? paramDogboneType.value : 'dogbone';
-        if (useDogbone && isClosed) {
-          loopsToCut = loopsToCut.map(l => applyDogboneRelief(l, toolRadius, dogboneType, strategy));
+        if (useDogbone && isClosed && itemStrategy !== 'chamfer' && itemStrategy !== 'pocket') {
+          loopsToCut = loopsToCut.map(l => applyDogboneRelief(l, toolRadius, dogboneType, itemStrategy));
         }
 
-        // Visualização 2D no Canvas com os percursos compensados reais
+        // Visualização 2D no Canvas com cores específicas por estratégia
         loopsToCut.forEach(loop => {
           const vis = loop.map(p => ({
             x: (p.x + wcsX) * ESCALA_MM_PX,
             y: canvas.height - ((p.y + wcsY) * ESCALA_MM_PX)
           }));
-          toolpathsToVisualise.push(vis);
+          toolpathsToVisualise.push({ points: vis, color: toolpathColor });
         });
 
         // Passagens verticais de descida Z
         const zPasses = [];
         let currentZ = -depthPass;
-        while (currentZ > depthTotal) {
+        while (currentZ > targetDepth) {
           zPasses.push(currentZ);
           currentZ -= depthPass;
         }
-        zPasses.push(depthTotal);
+        zPasses.push(targetDepth);
 
         const useRamping = paramUseRamping && paramUseRamping.checked;
         const rampAngle = paramRampAngle ? parseFloat(paramRampAngle.value) || 10 : 10;
@@ -4149,14 +4420,14 @@ function generateGCode() {
               gcode.push(`G0 X${startPt.x.toFixed(3)} Y${startPt.y.toFixed(3)}`);
             }
 
-            const isBottomPass = (zVal <= depthTotal + tabHeight);
-            // Aplicar Holding Tabs apenas no contorno exterior ou sobre a linha
-            const shouldApplyTabs = useTabs && isClosed && isBottomPass && (strategy === 'outside' || strategy === 'on');
+            const isBottomPass = (zVal <= targetDepth + tabHeight);
+            // Aplicar Holding Tabs apenas no contorno exterior ou sobre a linha (não em pocket nem chanfro)
+            const shouldApplyTabs = useTabs && isClosed && isBottomPass && (itemStrategy === 'outside' || itemStrategy === 'on');
             
             let waypoints;
             if (shouldApplyTabs) {
-              waypoints = generateContourWithTabs(loop, { enabled: true, count: tabCount, width: tabWidth, height: tabHeight }, zVal, depthTotal);
-            } else if (useRamping && isClosed) {
+              waypoints = generateContourWithTabs(loop, { enabled: true, count: tabCount, width: tabWidth, height: tabHeight }, zVal, targetDepth);
+            } else if (useRamping && isClosed && itemStrategy !== 'pocket') {
               waypoints = generateRampedPass(loop, prevZ, zVal, rampAngle, rampMaxLen);
             } else {
               waypoints = loop.map(p => ({ x: p.x, y: p.y, z: zVal }));
@@ -4277,14 +4548,18 @@ function generateGCode() {
 }
 
 /**
- * Desenha percursos de ferramentas no Fabric.js (linhas tracejadas decorativas)
+ * Desenha percursos de ferramentas no Fabric.js (linhas tracejadas com suporte a cores por estratégia)
  */
 function drawVisualToolpaths(paths) {
-  paths.forEach(points => {
-    // Desenhar linhas pontilhadas azuis para indicar corte
+  paths.forEach(item => {
+    const points = Array.isArray(item) ? item : (item && item.points);
+    const strokeColor = (item && item.color) ? item.color : '#60a5fa';
+    if (!points || points.length < 2) return;
+
+    // Desenhar linhas pontilhadas com a cor da estratégia correspondente
     for (let i = 0; i < points.length - 1; i++) {
       const line = new fabric.Line([points[i].x, points[i].y, points[i+1].x, points[i+1].y], {
-        stroke: '#60a5fa', // Azul simulação
+        stroke: strokeColor,
         strokeWidth: 1.5,
         strokeDashArray: [4, 4],
         selectable: false,
@@ -5440,23 +5715,169 @@ function sendObjectToOrigin(obj) {
 }
 
 /**
+ * Atualiza o preview textual da profundidade Z calculada para o chanfro
+ */
+function updateChamferPreview() {
+  const w = parseFloat(inputChamferWidth?.value) || 1.0;
+  const angle = parseFloat(paramChamferAngle?.value) || 90;
+  const tipOffset = parseFloat(paramChamferTipOffset?.value) || 0.5;
+  const halfAngleRad = (angle / 2) * (Math.PI / 180);
+  const tanHalf = Math.tan(halfAngleRad) || 1;
+  const zCut = -(w / tanHalf + tipOffset);
+  if (lblChamferDepthCalc) {
+    lblChamferDepthCalc.textContent = `Z = ${zCut.toFixed(2)} mm (Bisel ${w.toFixed(1)}mm)`;
+  }
+}
+
+/**
+ * Alterna a visibilidade do painel de parâmetros de Chanfro
+ */
+function toggleChamferSettings(show) {
+  if (chamferSettingsGrid) {
+    chamferSettingsGrid.style.display = show ? 'block' : 'none';
+  }
+  if (show) updateChamferPreview();
+}
+
+/**
+ * Retorna o nome amigável da estratégia CAM
+ */
+function getStrategyLabel(val) {
+  const labels = {
+    outside: 'Perfil Exterior (+R)',
+    inside: 'Perfil Interior (-R)',
+    pocket: 'Desbaste Interior (Pocket)',
+    chamfer: 'Chanfro nas Arestas (Bisel)',
+    on: 'Sobre a Linha (Engrave)'
+  };
+  return labels[val] || val;
+}
+
+/**
+ * Aplica uma estratégia CAM e a respetiva cor ao objeto
+ */
+function applyStrategyToObject(obj, strategyVal) {
+  if (!obj || obj.isOriginMarker || obj.isVisualPath) return;
+  obj.camStrategy = strategyVal;
+  const colors = {
+    outside: '#38bdf8',  // Azul Ciano - Perfil Exterior
+    inside: '#f59e0b',   // Âmbar - Perfil Interior
+    pocket: '#10b981',   // Verde Esmeralda - Desbaste de Caixa / Pocket
+    chamfer: '#a855f7',  // Roxo / Violeta - Chanfro nas Arestas
+    on: '#ec4899'        // Rosa - Sobre a Linha
+  };
+  obj.set({ stroke: colors[strategyVal] || '#38bdf8' });
+}
+
+/**
+ * Define a estratégia CAM do objeto clicado com o botão direito
+ */
+function setRightClickedObjectStrategy(strategyVal) {
+  const target = rightClickedObject || canvas.getActiveObject();
+  if (!target) return;
+  if (target.type === 'activeSelection') {
+    target.forEachObject(child => applyStrategyToObject(child, strategyVal));
+  } else {
+    applyStrategyToObject(target, strategyVal);
+  }
+  if (selectStrategy) {
+    selectStrategy.value = strategyVal;
+    toggleChamferSettings(strategyVal === 'chamfer');
+  }
+  canvas.requestRenderAll();
+  saveAppState();
+  clearVisualToolpaths();
+  showCamToast(`🎨 Contorno definido como: ${getStrategyLabel(strategyVal)}`);
+}
+
+/**
+ * Verifica se um objeto Fabric.Path tem múltiplos subcaminhos (comandos M)
+ */
+function hasMultipleSubpaths(pathObj) {
+  if (!pathObj || pathObj.type !== 'path' || !Array.isArray(pathObj.path)) return false;
+  let mCount = 0;
+  for (const cmd of pathObj.path) {
+    if (cmd[0] === 'M' || cmd[0] === 'm') mCount++;
+    if (mCount > 1) return true;
+  }
+  return false;
+}
+
+/**
+ * Separa os subcaminhos de um Fabric.Path em caminhos independentes editáveis
+ */
+function splitPathSubpaths(pathObj) {
+  if (!hasMultipleSubpaths(pathObj)) return;
+  const cmds = pathObj.path;
+  const subpathCmds = [];
+  let cur = [];
+  for (let i = 0; i < cmds.length; i++) {
+    if ((cmds[i][0] === 'M' || cmds[i][0] === 'm') && cur.length > 0) {
+      subpathCmds.push(cur);
+      cur = [];
+    }
+    cur.push(cmds[i]);
+  }
+  if (cur.length > 0) subpathCmds.push(cur);
+  if (subpathCmds.length <= 1) return;
+
+  const createdPaths = [];
+
+  subpathCmds.forEach((cmdList, idx) => {
+    const dStr = cmdList.map(c => c.join(' ')).join(' ');
+    const p = new fabric.Path(dStr, {
+      stroke: idx === 0 ? '#38bdf8' : '#10b981',
+      fill: '',
+      strokeWidth: pathObj.strokeWidth || 1.5,
+      strokeUniform: true,
+      left: pathObj.left,
+      top: pathObj.top,
+      scaleX: pathObj.scaleX || 1,
+      scaleY: pathObj.scaleY || 1,
+      angle: pathObj.angle || 0,
+      camStrategy: idx === 0 ? 'outside' : 'pocket'
+    });
+    p.setCoords();
+    canvas.add(p);
+    createdPaths.push(p);
+  });
+
+  canvas.remove(pathObj);
+  const sel = new fabric.ActiveSelection(createdPaths, { canvas });
+  canvas.setActiveObject(sel);
+  canvas.requestRenderAll();
+  saveAppState();
+  clearVisualToolpaths();
+  showCamToast(`✂️ ${createdPaths.length} contornos e cavidades separados com sucesso! Podes agora selecionar cada um individualmente.`);
+}
+
+/**
  * Mostra o menu de contexto personalizado na posição do rato
  */
 function showContextMenu(e, obj) {
   if (!contextMenu) return;
   rightClickedObject = obj;
 
-  // Determinar o que mostrar consoante o tipo de selecção
   const activeObjs = canvas.getActiveObjects();
   const isGroup = obj && obj.type === 'group';
+  const hasSubpaths = obj && obj.type === 'path' && hasMultipleSubpaths(obj);
   const isMultiSelection = activeObjs.length > 1;
 
-  // "Agrupar" — apenas visivel com 2+ objectos seleccionados (que não sejam o marcador de origem)
+  // "Agrupar" — apenas visível com 2+ objectos seleccionados
   const canGroup = isMultiSelection && activeObjs.every(o => !o.isOriginMarker && !o.isVisualPath);
-  ctxGroup.style.display = canGroup ? 'block' : 'none';
+  if (ctxGroup) ctxGroup.style.display = canGroup ? 'block' : 'none';
 
-  // "Desagrupar" — apenas visivel quando o objecto clicado for um grupo
-  ctxUngroup.style.display = isGroup ? 'block' : 'none';
+  // "Desagrupar" — visível quando o objecto clicado for um grupo
+  if (ctxUngroup) ctxUngroup.style.display = isGroup ? 'block' : 'none';
+
+  // "Separar Contornos / Cavidades" — visível quando for um Path com múltiplos subcaminhos
+  if (ctxSplitSubpaths) ctxSplitSubpaths.style.display = hasSubpaths ? 'block' : 'none';
+
+  // Mostrar opções de estratégia apenas se for uma forma real
+  const isRealShape = obj && !obj.isOriginMarker && !obj.isVisualPath;
+  [ctxStrategyPocket, ctxStrategyChamfer, ctxStrategyOutside, ctxStrategyInside, ctxStrategyOn].forEach(el => {
+    if (el) el.style.display = isRealShape ? 'block' : 'none';
+  });
 
   contextMenu.style.left = `${e.clientX}px`;
   contextMenu.style.top = `${e.clientY}px`;
@@ -5480,19 +5901,15 @@ function groupSelectedObjects() {
   const activeObjs = canvas.getActiveObjects();
   if (activeObjs.length < 2) return;
 
-  // Filtrar apenas formas reais (excluir marca de origem e percursos visuais)
   const toGroup = activeObjs.filter(o => !o.isOriginMarker && !o.isVisualPath);
   if (toGroup.length < 2) return;
 
-  // Desseleccionar antes de agrupar
   canvas.discardActiveObject();
 
   const group = new fabric.Group(toGroup, {
-    originX: 'left',
-    originY: 'top'
+    strokeUniform: true
   });
 
-  // Remover formas individuais e adicionar o grupo
   toGroup.forEach(obj => canvas.remove(obj));
   canvas.add(group);
   canvas.setActiveObject(group);
@@ -5500,32 +5917,31 @@ function groupSelectedObjects() {
 
   clearVisualToolpaths();
   saveAppState();
+  showCamToast(`📦 ${toGroup.length} contornos agrupados!`);
 }
 
 /**
- * Desagrupa o grupo actualmente seleccionado, devolvendo os objectos individuais ao canvas
+ * Desagrupa o grupo actualmente seleccionado ou separa caminhos múltiplos
  */
 function ungroupSelectedObject() {
   const activeObj = canvas.getActiveObject();
-  if (!activeObj || activeObj.type !== 'group') return;
+  if (!activeObj) return;
 
-  const items = activeObj.getObjects();
-  activeObj.destroy(); // Liberta as referências internas do grupo
-  canvas.remove(activeObj);
+  // 1. Caso seja um Grupo Fabric.js
+  if (activeObj.type === 'group') {
+    const items = activeObj.getObjects();
+    activeObj.toActiveSelection();
+    canvas.requestRenderAll();
+    saveAppState();
+    clearVisualToolpaths();
+    showCamToast(`🧩 ${items.length} contornos desagrupados com sucesso! Podes agora clicar em qualquer cavidade para definir desbaste ou chanfro.`);
+    return;
+  }
 
-  // Readicionar cada elemento individualmente com as coordenadas absolutas restauradas
-  items.forEach(item => {
-    item.set({ originX: 'left', originY: 'top' });
-    canvas.add(item);
-  });
-
-  // Seleccionar todos os objectos libertados
-  const sel = new fabric.ActiveSelection(items, { canvas });
-  canvas.setActiveObject(sel);
-  canvas.requestRenderAll();
-
-  clearVisualToolpaths();
-  saveAppState();
+  // 2. Caso seja um Path com múltiplos subcaminhos
+  if (activeObj.type === 'path' && hasMultipleSubpaths(activeObj)) {
+    splitPathSubpaths(activeObj);
+  }
 }
 
 /**
