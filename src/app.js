@@ -1857,18 +1857,21 @@ function setupEventListeners() {
     clearVisualToolpaths();
     saveAppState();
     recordHistoryState();
+    renderLayersAndVectorsList();
   });
   canvas.on('object:added', (e) => {
     if (e.target && (e.target.isVisualPath || e.target.isOriginMarker)) return;
     clearVisualToolpaths();
     saveAppState();
     recordHistoryState();
+    renderLayersAndVectorsList();
   });
   canvas.on('object:removed', (e) => {
     if (e.target && (e.target.isVisualPath || e.target.isOriginMarker)) return;
     clearVisualToolpaths();
     saveAppState();
     recordHistoryState();
+    renderLayersAndVectorsList();
   });
 
   // Finalização global de arrasto fora do canvas
@@ -1960,12 +1963,166 @@ function setupEventListeners() {
 
   // Separadores da Barra Lateral (Vectric VCarve layout)
   const tabBtnCam = document.getElementById('tab-btn-cam');
+  const tabBtnLayers = document.getElementById('tab-btn-layers');
   const tabBtnMaterial = document.getElementById('tab-btn-material');
   const tabBtnGcode = document.getElementById('tab-btn-gcode');
 
   if (tabBtnCam) tabBtnCam.addEventListener('click', () => switchSidebarTab('cam'));
+  if (tabBtnLayers) tabBtnLayers.addEventListener('click', () => switchSidebarTab('layers'));
   if (tabBtnMaterial) tabBtnMaterial.addEventListener('click', () => switchSidebarTab('material'));
   if (tabBtnGcode) tabBtnGcode.addEventListener('click', () => switchSidebarTab('gcode'));
+
+  // Ações Rápidas de Vetores e Camadas (Aba Camadas)
+  const btnSelectAllVectors = document.getElementById('btn-select-all-vectors');
+  if (btnSelectAllVectors) {
+    btnSelectAllVectors.addEventListener('click', () => {
+      if (!canvas) return;
+      const objs = canvas.getObjects().filter(o => !o.isOriginMarker && !o.isVisualPath && o.visible !== false);
+      if (objs.length === 0) return;
+      const sel = new fabric.ActiveSelection(objs, { canvas });
+      canvas.setActiveObject(sel);
+      canvas.requestRenderAll();
+      updateSelectionState();
+      showCamToast(`🔳 ${objs.length} contornos selecionados.`);
+    });
+  }
+
+  const btnDeselectAllVectors = document.getElementById('btn-deselect-all-vectors');
+  if (btnDeselectAllVectors) {
+    btnDeselectAllVectors.addEventListener('click', () => {
+      if (!canvas) return;
+      canvas.discardActiveObject();
+      canvas.requestRenderAll();
+      updateSelectionState();
+      showCamToast('⬜ Seleção desmarcada.');
+    });
+  }
+
+  const btnExplodeAll = document.getElementById('btn-explode-all');
+  if (btnExplodeAll) {
+    btnExplodeAll.addEventListener('click', () => {
+      explodeAllGroups();
+    });
+  }
+
+  const btnSplitSubpathsTrigger = document.getElementById('btn-split-subpaths-trigger');
+  if (btnSplitSubpathsTrigger) {
+    btnSplitSubpathsTrigger.addEventListener('click', () => {
+      const activeObj = canvas.getActiveObject();
+      if (activeObj) {
+        if (activeObj.type === 'path' && hasMultipleSubpaths(activeObj)) {
+          splitPathSubpaths(activeObj);
+          return;
+        }
+        if (activeObj.type === 'activeSelection') {
+          let anySplit = false;
+          activeObj.forEachObject(o => {
+            if (o.type === 'path' && hasMultipleSubpaths(o)) {
+              splitPathSubpaths(o);
+              anySplit = true;
+            }
+          });
+          if (anySplit) return;
+        }
+      }
+      const comp = canvas.getObjects().find(o => o.type === 'path' && hasMultipleSubpaths(o));
+      if (comp) {
+        splitPathSubpaths(comp);
+      } else {
+        showCamToast('ℹ️ Nenhum contorno composto para separar.');
+      }
+    });
+  }
+
+  // Delegação de eventos na lista de camadas (Visibilidade e Seleção de Camada)
+  const layersListContainer = document.getElementById('layers-list-container');
+  if (layersListContainer) {
+    layersListContainer.addEventListener('click', (e) => {
+      const visBtn = e.target.closest('.layer-vis-btn');
+      if (visBtn) {
+        const lName = visBtn.getAttribute('data-layer');
+        if (!lName || !canvas) return;
+        const objs = canvas.getObjects().filter(o => !o.isOriginMarker && !o.isVisualPath && (o.layerName || 'Camada 0') === lName);
+        const anyVisible = objs.some(o => o.visible !== false);
+        objs.forEach(o => o.set('visible', !anyVisible));
+        canvas.discardActiveObject();
+        canvas.requestRenderAll();
+        saveAppState();
+        renderLayersAndVectorsList();
+        showCamToast(!anyVisible ? `👁️ Camada "${lName}" visível` : `🙈 Camada "${lName}" oculta`);
+        return;
+      }
+
+      const selBtn = e.target.closest('.layer-sel-btn') || e.target.closest('.layer-item-card');
+      if (selBtn) {
+        const lName = selBtn.getAttribute('data-layer');
+        if (!lName || !canvas) return;
+        const objs = canvas.getObjects().filter(o => !o.isOriginMarker && !o.isVisualPath && (o.layerName || 'Camada 0') === lName && o.visible !== false);
+        if (objs.length === 0) return;
+        if (objs.length === 1) {
+          canvas.setActiveObject(objs[0]);
+        } else {
+          const sel = new fabric.ActiveSelection(objs, { canvas });
+          canvas.setActiveObject(sel);
+        }
+        canvas.requestRenderAll();
+        updateSelectionState();
+        showCamToast(`🔳 ${objs.length} contornos selecionados na camada "${lName}"`);
+      }
+    });
+  }
+
+  // Delegação de eventos na lista de vetores/contornos (Visibilidade, Eliminar e Seleção Canvas)
+  const vectorsListContainer = document.getElementById('vectors-list-container');
+  if (vectorsListContainer) {
+    vectorsListContainer.addEventListener('click', (e) => {
+      const visBtn = e.target.closest('.vec-btn-vis');
+      if (visBtn) {
+        const idx = parseInt(visBtn.getAttribute('data-index'), 10);
+        const userObjs = canvas.getObjects().filter(o => !o.isOriginMarker && !o.isVisualPath);
+        const obj = userObjs[idx];
+        if (obj) {
+          obj.set('visible', obj.visible === false ? true : false);
+          if (obj.visible === false && canvas.getActiveObject() === obj) {
+            canvas.discardActiveObject();
+          }
+          canvas.requestRenderAll();
+          saveAppState();
+          renderLayersAndVectorsList();
+        }
+        return;
+      }
+
+      const delBtn = e.target.closest('.vec-btn-del');
+      if (delBtn) {
+        const idx = parseInt(delBtn.getAttribute('data-index'), 10);
+        const userObjs = canvas.getObjects().filter(o => !o.isOriginMarker && !o.isVisualPath);
+        const obj = userObjs[idx];
+        if (obj) {
+          canvas.remove(obj);
+          canvas.requestRenderAll();
+          saveAppState();
+          recordHistoryState();
+          updateSelectionState();
+          showCamToast('🗑️ Contorno eliminado.');
+        }
+        return;
+      }
+
+      // Clicar no cartão para focar/selecionar o contorno no Canvas
+      const card = e.target.closest('.vector-item-card');
+      if (card) {
+        const idx = parseInt(card.getAttribute('data-index'), 10);
+        const userObjs = canvas.getObjects().filter(o => !o.isOriginMarker && !o.isVisualPath);
+        const obj = userObjs[idx];
+        if (obj && obj.visible !== false) {
+          canvas.setActiveObject(obj);
+          canvas.requestRenderAll();
+          updateSelectionState();
+        }
+      }
+    });
+  }
 
   // Botões de Estratégia da Grelha Vectric
   const stratBtns = document.querySelectorAll('.strat-btn');
@@ -2450,7 +2607,12 @@ function handleCanvasMouseUp() {
       // Tornar selecionável após finalizar
       activeShape.set({
         selectable: true,
-        evented: true
+        evented: true,
+        perPixelTargetFind: true,
+        targetFindTolerance: 8,
+        strokeUniform: true,
+        layerName: activeShape.layerName || 'Desenho 2D',
+        camStrategy: activeShape.camStrategy || 'outside'
       });
       activeShape.setCoords();
     }
@@ -2459,6 +2621,8 @@ function handleCanvasMouseUp() {
   activeShape = null;
   setTool('select');
   saveAppState();
+  recordHistoryState();
+  renderLayersAndVectorsList();
 }
 
 /**
@@ -2631,7 +2795,10 @@ function restoreCanvasFromSnapshot(jsonStr) {
       enlivenedObjects.forEach(obj => {
         obj.set({
           selectable: true,
-          evented: true
+          evented: true,
+          perPixelTargetFind: true,
+          targetFindTolerance: 8,
+          strokeUniform: true
         });
         canvas.add(obj);
       });
@@ -2876,6 +3043,9 @@ function updateSelectionState() {
       btnUngroup.setAttribute('disabled', 'true');
     }
   }
+
+  // Manter a lista de camadas e contornos sincronizada com a seleção ativa
+  renderLayersAndVectorsList();
 }
 
 /**
@@ -2892,6 +3062,8 @@ function deleteSelectedObject() {
     }
     canvas.requestRenderAll();
     saveAppState();
+    recordHistoryState();
+    updateSelectionState();
   }
 }
 
@@ -3066,6 +3238,7 @@ class DxfReader {
 
     for (let eIdx = 0; eIdx < rawEntities.length; eIdx++) {
       const ent = rawEntities[eIdx];
+      const layer = getTag(ent, 8) || '0';
 
       switch (ent.type) {
         case "LINE": {
@@ -3073,7 +3246,7 @@ class DxfReader {
           const y1 = getNum(ent, 20);
           const x2 = getNum(ent, 11);
           const y2 = getNum(ent, 21);
-          pieces.push({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 } });
+          pieces.push({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, layer });
           break;
         }
 
@@ -3084,12 +3257,15 @@ class DxfReader {
           if (r > 0) {
             // Círculo fechado aproximado em 4 quadrantes cúbicos de Bézier (k = r * 0.5522847498)
             const k = r * 0.5522847498;
-            closedLoops.push([
-              { start: { x: cx + r, y: cy }, c1: { x: cx + r, y: cy + k }, c2: { x: cx + k, y: cy + r }, end: { x: cx, y: cy + r } },
-              { start: { x: cx, y: cy + r }, c1: { x: cx - k, y: cy + r }, c2: { x: cx - r, y: cy + k }, end: { x: cx - r, y: cy } },
-              { start: { x: cx - r, y: cy }, c1: { x: cx - r, y: cy - k }, c2: { x: cx - k, y: cy - r }, end: { x: cx, y: cy - r } },
-              { start: { x: cx, y: cy - r }, c1: { x: cx + k, y: cy - r }, c2: { x: cx + r, y: cy - k }, end: { x: cx + r, y: cy } },
-            ]);
+            closedLoops.push({
+              loop: [
+                { start: { x: cx + r, y: cy }, c1: { x: cx + r, y: cy + k }, c2: { x: cx + k, y: cy + r }, end: { x: cx, y: cy + r } },
+                { start: { x: cx, y: cy + r }, c1: { x: cx - k, y: cy + r }, c2: { x: cx - r, y: cy + k }, end: { x: cx - r, y: cy } },
+                { start: { x: cx - r, y: cy }, c1: { x: cx - r, y: cy - k }, c2: { x: cx - k, y: cy - r }, end: { x: cx, y: cy - r } },
+                { start: { x: cx, y: cy - r }, c1: { x: cx + k, y: cy - r }, c2: { x: cx + r, y: cy - k }, end: { x: cx + r, y: cy } }
+              ],
+              layer
+            });
           }
           break;
         }
@@ -3124,7 +3300,8 @@ class DxfReader {
               start: p1,
               c1: { x: p1.x + t1.x * k, y: p1.y + t1.y * k },
               c2: { x: p2.x - t2.x * k, y: p2.y - t2.y * k },
-              end: p2
+              end: p2,
+              layer
             });
           }
           break;
@@ -3158,10 +3335,12 @@ class DxfReader {
               const p1 = vertices[i];
               const p2 = vertices[next];
               const b = p1.bulge || 0;
-              polyPieces.push(...this.arcPiecesFromBulge(p1, p2, b));
+              const subPieces = this.arcPiecesFromBulge(p1, p2, b);
+              subPieces.forEach(sp => sp.layer = layer);
+              polyPieces.push(...subPieces);
             }
             if (closed) {
-              closedLoops.push(polyPieces);
+              closedLoops.push({ loop: polyPieces, layer });
             } else {
               pieces.push(...polyPieces);
             }
@@ -3194,10 +3373,12 @@ class DxfReader {
               const p1 = vertices[i];
               const p2 = vertices[next];
               const b = p1.bulge || 0;
-              polyPieces.push(...this.arcPiecesFromBulge(p1, p2, b));
+              const subPieces = this.arcPiecesFromBulge(p1, p2, b);
+              subPieces.forEach(sp => sp.layer = layer);
+              polyPieces.push(...subPieces);
             }
             if (closed) {
-              closedLoops.push(polyPieces);
+              closedLoops.push({ loop: polyPieces, layer });
             } else {
               pieces.push(...polyPieces);
             }
@@ -3238,11 +3419,11 @@ class DxfReader {
           for (let s = 0; s < steps; s++) {
             const p1 = getEllPt(sParam + s * step);
             const p2 = getEllPt(sParam + (s + 1) * step);
-            ellPieces.push({ start: p1, end: p2 });
+            ellPieces.push({ start: p1, end: p2, layer });
           }
 
           if (isClosed) {
-            closedLoops.push(ellPieces);
+            closedLoops.push({ loop: ellPieces, layer });
           } else {
             pieces.push(...ellPieces);
           }
@@ -3267,11 +3448,11 @@ class DxfReader {
           if (ctrlPts.length >= 2) {
             const splinePieces = [];
             for (let i = 0; i < ctrlPts.length - 1; i++) {
-              splinePieces.push({ start: ctrlPts[i], end: ctrlPts[i + 1] });
+              splinePieces.push({ start: ctrlPts[i], end: ctrlPts[i + 1], layer });
             }
             if (closed && ctrlPts.length > 2) {
-              splinePieces.push({ start: ctrlPts[ctrlPts.length - 1], end: ctrlPts[0] });
-              closedLoops.push(splinePieces);
+              splinePieces.push({ start: ctrlPts[ctrlPts.length - 1], end: ctrlPts[0], layer });
+              closedLoops.push({ loop: splinePieces, layer });
             } else {
               pieces.push(...splinePieces);
             }
@@ -3281,20 +3462,21 @@ class DxfReader {
       }
     }
 
-    const joined = this.stitchPieces(pieces, tolerance);
-    const allLoops = [...closedLoops, ...joined.loops];
-    const openRuns = joined.open;
-
-    const svgPathStrings = [];
     const totalScale = unitScale * scaleMmPx;
-
     const toSvg = (p) => ({
       x: p.x * totalScale,
       y: -p.y * totalScale // Inversão vertical para manter orientação no canvas
     });
 
-    for (const loop of allLoops) {
-      if (loop.length === 0) continue;
+    const allPathItems = [];
+    const layersSet = new Set();
+
+    // 1. Processar loops já fechados nativamente
+    for (const item of closedLoops) {
+      const loop = item.loop;
+      const l = item.layer || '0';
+      layersSet.add(l);
+      if (!loop || loop.length === 0) continue;
       const s0 = toSvg(loop[0].start);
       let d = `M ${s0.x.toFixed(3)} ${s0.y.toFixed(3)}`;
       for (const piece of loop) {
@@ -3308,30 +3490,63 @@ class DxfReader {
         }
       }
       d += ` Z`;
-      svgPathStrings.push(d);
+      allPathItems.push({ d, layer: l, isClosed: true });
     }
 
-    for (const run of openRuns) {
-      if (run.length === 0) continue;
-      const s0 = toSvg(run[0].start);
-      let d = `M ${s0.x.toFixed(3)} ${s0.y.toFixed(3)}`;
-      for (const piece of run) {
-        const e = toSvg(piece.end);
-        if (piece.c1 && piece.c2) {
-          const c1 = toSvg(piece.c1);
-          const c2 = toSvg(piece.c2);
-          d += ` C ${c1.x.toFixed(3)} ${c1.y.toFixed(3)}, ${c2.x.toFixed(3)} ${c2.y.toFixed(3)}, ${e.x.toFixed(3)} ${e.y.toFixed(3)}`;
-        } else {
-          d += ` L ${e.x.toFixed(3)} ${e.y.toFixed(3)}`;
+    // 2. Agrupar peças soltas por camada e costurar (stitch) dentro de cada camada
+    const piecesByLayer = {};
+    for (const piece of pieces) {
+      const l = piece.layer || '0';
+      if (!piecesByLayer[l]) piecesByLayer[l] = [];
+      piecesByLayer[l].push(piece);
+    }
+
+    for (const l in piecesByLayer) {
+      layersSet.add(l);
+      const joined = this.stitchPieces(piecesByLayer[l], tolerance);
+      
+      for (const loop of joined.loops) {
+        if (!loop || loop.length === 0) continue;
+        const s0 = toSvg(loop[0].start);
+        let d = `M ${s0.x.toFixed(3)} ${s0.y.toFixed(3)}`;
+        for (const piece of loop) {
+          const e = toSvg(piece.end);
+          if (piece.c1 && piece.c2) {
+            const c1 = toSvg(piece.c1);
+            const c2 = toSvg(piece.c2);
+            d += ` C ${c1.x.toFixed(3)} ${c1.y.toFixed(3)}, ${c2.x.toFixed(3)} ${c2.y.toFixed(3)}, ${e.x.toFixed(3)} ${e.y.toFixed(3)}`;
+          } else {
+            d += ` L ${e.x.toFixed(3)} ${e.y.toFixed(3)}`;
+          }
         }
+        d += ` Z`;
+        allPathItems.push({ d, layer: l, isClosed: true });
       }
-      svgPathStrings.push(d);
+
+      for (const run of joined.open) {
+        if (!run || run.length === 0) continue;
+        const s0 = toSvg(run[0].start);
+        let d = `M ${s0.x.toFixed(3)} ${s0.y.toFixed(3)}`;
+        for (const piece of run) {
+          const e = toSvg(piece.end);
+          if (piece.c1 && piece.c2) {
+            const c1 = toSvg(piece.c1);
+            const c2 = toSvg(piece.c2);
+            d += ` C ${c1.x.toFixed(3)} ${c1.y.toFixed(3)}, ${c2.x.toFixed(3)} ${c2.y.toFixed(3)}, ${e.x.toFixed(3)} ${e.y.toFixed(3)}`;
+          } else {
+            d += ` L ${e.x.toFixed(3)} ${e.y.toFixed(3)}`;
+          }
+        }
+        allPathItems.push({ d, layer: l, isClosed: false });
+      }
     }
 
     return {
-      svgPaths: svgPathStrings,
-      totalLoops: allLoops.length,
-      totalOpen: openRuns.length,
+      pathItems: allPathItems,
+      svgPaths: allPathItems.map(p => p.d),
+      layers: Array.from(layersSet),
+      totalLoops: allPathItems.filter(p => p.isClosed).length,
+      totalOpen: allPathItems.filter(p => !p.isClosed).length,
       unitScale
     };
   }
@@ -3460,48 +3675,32 @@ function processImportedFile(file) {
         const text = evt.target.result;
         const result = DxfReader.parseToSvgPaths(text, { scaleMmPx: ESCALA_MM_PX });
 
-        if (!result.svgPaths || result.svgPaths.length === 0) {
+        const items = result.pathItems && result.pathItems.length > 0
+          ? result.pathItems
+          : (result.svgPaths || []).map(d => ({ d, layer: '0', isClosed: true }));
+
+        if (items.length === 0) {
           alert("Não foram encontrados contornos nem percursos vetoriais legíveis neste ficheiro DXF.");
           return;
         }
 
-        if (result.svgPaths.length === 1) {
-          const pathObj = new fabric.Path(result.svgPaths[0], {
+        const pathObjs = items.map((item, idx) => {
+          return new fabric.Path(item.d, {
             stroke: '#38bdf8',
             fill: '',
             strokeWidth: 1.5,
             strokeUniform: true,
-            camStrategy: 'outside'
+            perPixelTargetFind: true,
+            targetFindTolerance: 8,
+            camStrategy: 'outside',
+            layerName: item.layer || '0',
+            dxfClosed: item.isClosed !== false
           });
+        });
 
-          const maxAllowedW = canvas.width * 0.9;
-          const maxAllowedH = canvas.height * 0.9;
-          if (pathObj.width > maxAllowedW || pathObj.height > maxAllowedH) {
-            pathObj.scaleToWidth(Math.min(maxAllowedW, maxAllowedH));
-          }
-
-          pathObj.set({
-            left: (canvas.width - pathObj.getScaledWidth()) / 2,
-            top: (canvas.height - pathObj.getScaledHeight()) / 2
-          });
-
-          canvas.add(pathObj);
-          canvas.setActiveObject(pathObj);
-          canvas.requestRenderAll();
-          saveAppState();
-
-          showCamToast(`📐 DXF importado: 1 contorno! Clica na forma para definir a estratégia.`);
-        } else {
-          // Múltiplos contornos (ex: contorno exterior e cavidades interiores de desbaste)
-          const pathObjs = result.svgPaths.map(dStr => {
-            return new fabric.Path(dStr, {
-              fill: '',
-              strokeWidth: 1.5,
-              strokeUniform: true
-            });
-          });
-
-          // Determinar o contorno exterior (o de maior área de bounding box)
+        // Se houver mais do que 1 contorno, identificar o exterior (maior bounding box)
+        // e marcar os restantes automaticamente como 'pocket' (desbaste de cavidades interiores)
+        if (pathObjs.length > 1) {
           let maxArea = -1;
           let outerIdx = 0;
           pathObjs.forEach((p, idx) => {
@@ -3514,38 +3713,67 @@ function processImportedFile(file) {
 
           pathObjs.forEach((p, idx) => {
             if (idx === outerIdx) {
-              p.set({ stroke: '#38bdf8' }); // Azul ciano para perfil exterior
+              p.set({ stroke: '#38bdf8' });
               p.camStrategy = 'outside';
               p.camRole = 'exterior';
             } else {
-              p.set({ stroke: '#10b981' }); // Verde esmeralda para desbaste de cavidades/pockets
+              p.set({ stroke: '#10b981' });
               p.camStrategy = 'pocket';
               p.camRole = 'pocket';
             }
           });
+        }
 
-          const group = new fabric.Group(pathObjs, {
-            strokeUniform: true
+        // Calcular limites coletivos para centrar e ajustar à mesa mantendo objetos 100% independentes
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        pathObjs.forEach(p => {
+          const b = p.getBoundingRect(true, true);
+          minX = Math.min(minX, b.left);
+          minY = Math.min(minY, b.top);
+          maxX = Math.max(maxX, b.left + b.width);
+          maxY = Math.max(maxY, b.top + b.height);
+        });
+
+        const totalW = maxX - minX || 1;
+        const totalH = maxY - minY || 1;
+        const maxAllowedW = canvas.width * 0.85;
+        const maxAllowedH = canvas.height * 0.85;
+        const scale = Math.min(1, Math.min(maxAllowedW / totalW, maxAllowedH / totalH));
+
+        const targetCenterX = canvas.width / 2;
+        const targetCenterY = canvas.height / 2;
+        const currentCenterX = minX + totalW / 2;
+        const currentCenterY = minY + totalH / 2;
+
+        pathObjs.forEach(p => {
+          const dx = (p.left - currentCenterX) * scale;
+          const dy = (p.top - currentCenterY) * scale;
+          p.scale(scale);
+          p.set({
+            left: targetCenterX + dx,
+            top: targetCenterY + dy,
+            perPixelTargetFind: true,
+            targetFindTolerance: 8
           });
+          p.setCoords();
+          canvas.add(p);
+        });
 
-          const maxAllowedW = canvas.width * 0.9;
-          const maxAllowedH = canvas.height * 0.9;
-          if (group.width > maxAllowedW || group.height > maxAllowedH) {
-            group.scaleToWidth(Math.min(maxAllowedW, maxAllowedH));
-          }
-
-          group.set({
-            left: (canvas.width - group.getScaledWidth()) / 2,
-            top: (canvas.height - group.getScaledHeight()) / 2
-          });
-
-          canvas.add(group);
-          canvas.setActiveObject(group);
+        // Caso haja apenas 1 contorno, mas com múltiplos subcaminhos M (caminho composto), separar automaticamente!
+        if (pathObjs.length === 1 && hasMultipleSubpaths(pathObjs[0])) {
+          splitPathSubpaths(pathObjs[0]);
+        } else {
+          // Selecionar todos inicialmente como ActiveSelection para que o utilizador possa mover em bloco se desejar
+          const sel = new fabric.ActiveSelection(pathObjs, { canvas });
+          canvas.setActiveObject(sel);
           canvas.requestRenderAll();
           saveAppState();
-
-          showCamToast(`📐 DXF importado: 1 perfil exterior (#38bdf8) e ${pathObjs.length - 1} cavidade(s) para desbaste (#10b981)! Clica em "🧩 Desagrupar" para editar individualmente.`);
+          recordHistoryState();
+          renderLayersAndVectorsList();
         }
+
+        const layerCount = result.layers ? result.layers.length : 1;
+        showCamToast(`📐 DXF importado: ${pathObjs.length} contorno(s) em ${layerCount} camada(s)! Cada linha é selecionável individualmente no canvas ou na lista de Camadas.`);
       } catch (err) {
         console.error("Erro ao importar DXF:", err);
         alert(`Erro ao processar ficheiro DXF: ${err.message}`);
@@ -3559,21 +3787,69 @@ function processImportedFile(file) {
   if (file.type === 'image/svg+xml' || lowerName.endsWith('.svg')) {
     reader.onload = function(f) {
       fabric.loadSVGFromString(f.target.result, function(objects, options) {
-        const obj = fabric.util.groupSVGElements(objects, options);
-        
-        obj.scaleToWidth(250);
-        obj.set({
-          left: (canvas.width - obj.getScaledWidth()) / 2,
-          top: (canvas.height - obj.getScaledHeight()) / 2,
-          stroke: '#f97316',
-          strokeWidth: obj.strokeWidth || 1.5
+        if (!objects || objects.length === 0) {
+          alert("Não foram encontrados vetores legíveis neste ficheiro SVG.");
+          return;
+        }
+
+        const validObjs = objects.filter(o => o && (o.width > 0 || o.height > 0 || o.path));
+        if (validObjs.length === 0) {
+          alert("Nenhum contorno válido encontrado no SVG.");
+          return;
+        }
+
+        // Preparar estilos e limites coletivos para objetos independentes
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        validObjs.forEach((o, idx) => {
+          o.set({
+            fill: '',
+            stroke: o.stroke || '#38bdf8',
+            strokeWidth: o.strokeWidth || 1.5,
+            strokeUniform: true,
+            perPixelTargetFind: true,
+            targetFindTolerance: 8,
+            camStrategy: o.camStrategy || 'outside',
+            layerName: o.id || `SVG Camada ${idx + 1}`
+          });
+          const b = o.getBoundingRect(true, true);
+          minX = Math.min(minX, b.left);
+          minY = Math.min(minY, b.top);
+          maxX = Math.max(maxX, b.left + b.width);
+          maxY = Math.max(maxY, b.top + b.height);
         });
-        
-        canvas.add(obj);
-        canvas.setActiveObject(obj);
+
+        const totalW = maxX - minX || 1;
+        const totalH = maxY - minY || 1;
+        const maxAllowedW = canvas.width * 0.85;
+        const maxAllowedH = canvas.height * 0.85;
+        const scale = Math.min(1, Math.min(maxAllowedW / totalW, maxAllowedH / totalH));
+
+        const targetCenterX = canvas.width / 2;
+        const targetCenterY = canvas.height / 2;
+        const currentCenterX = minX + totalW / 2;
+        const currentCenterY = minY + totalH / 2;
+
+        validObjs.forEach(o => {
+          const dx = (o.left - currentCenterX) * scale;
+          const dy = (o.top - currentCenterY) * scale;
+          o.scale((o.scaleX || 1) * scale);
+          o.set({
+            left: targetCenterX + dx,
+            top: targetCenterY + dy,
+            perPixelTargetFind: true,
+            targetFindTolerance: 8
+          });
+          o.setCoords();
+          canvas.add(o);
+        });
+
+        const sel = new fabric.ActiveSelection(validObjs, { canvas });
+        canvas.setActiveObject(sel);
         canvas.requestRenderAll();
         saveAppState();
-        showCamToast("📐 SVG importado para a mesa com sucesso!");
+        recordHistoryState();
+        renderLayersAndVectorsList();
+        showCamToast(`📐 SVG importado: ${validObjs.length} elemento(s) individuais! Podes clicar em qualquer linha ou camada.`);
       });
     };
     reader.readAsText(file);
@@ -5944,6 +6220,9 @@ async function loadAppState() {
           canvas.forEachObject(obj => {
             obj.selectable = true;
             obj.evented = true;
+            obj.perPixelTargetFind = true;
+            obj.targetFindTolerance = 8;
+            obj.strokeUniform = true;
           });
           canvas.requestRenderAll();
           res();
@@ -5994,6 +6273,7 @@ async function loadAppState() {
     console.error("Erro ao restaurar o estado:", err);
   } finally {
     isRestoringState = false;
+    renderLayersAndVectorsList();
   }
 }
 
@@ -6139,11 +6419,12 @@ function syncStrategyUI(strategyVal, applyToSelection = false) {
 }
 
 /**
- * Alterna entre os separadores do painel lateral (Percursos, Mesa, G-code)
+ * Alterna entre os separadores do painel lateral (Percursos, Camadas, Mesa, G-code)
  */
 function switchSidebarTab(tabName) {
   const tabs = [
     { btnId: 'tab-btn-cam', contentId: 'sidebar-content-cam', name: 'cam' },
+    { btnId: 'tab-btn-layers', contentId: 'sidebar-content-layers', name: 'layers' },
     { btnId: 'tab-btn-material', contentId: 'sidebar-content-material', name: 'material' },
     { btnId: 'tab-btn-gcode', contentId: 'sidebar-content-gcode', name: 'gcode' }
   ];
@@ -6163,6 +6444,127 @@ function switchSidebarTab(tabName) {
       else content.classList.remove('active');
     }
   });
+
+  if (tabName === 'layers') {
+    renderLayersAndVectorsList();
+  }
+}
+
+/**
+ * Escapa strings para inserção segura em HTML
+ */
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * Renderiza a lista interativa de Camadas e Contornos individuais no painel lateral
+ */
+function renderLayersAndVectorsList() {
+  const layersContainer = document.getElementById('layers-list-container');
+  const vectorsContainer = document.getElementById('vectors-list-container');
+  const summaryCount = document.getElementById('layers-summary-count');
+
+  if (!canvas) return;
+  const userObjects = canvas.getObjects().filter(o => !o.isOriginMarker && !o.isVisualPath);
+
+  if (summaryCount) {
+    summaryCount.textContent = `${userObjects.length} contornos`;
+  }
+
+  if (!layersContainer || !vectorsContainer) return;
+
+  if (userObjects.length === 0) {
+    layersContainer.innerHTML = `<div class="empty-state-notice">Nenhum desenho na mesa. Importa um ficheiro DXF/SVG ou desenha formas para ver as camadas.</div>`;
+    vectorsContainer.innerHTML = `<div class="empty-state-notice">Nenhum vetor ativo no canvas.</div>`;
+    return;
+  }
+
+  // 1. Extrair e agrupar por camadas
+  const layerMap = new Map();
+  userObjects.forEach((obj) => {
+    const lName = obj.layerName || 'Camada 0';
+    if (!layerMap.has(lName)) layerMap.set(lName, []);
+    layerMap.get(lName).push(obj);
+  });
+
+  let layersHtml = '';
+  layerMap.forEach((objs, lName) => {
+    const isVisible = objs.some(o => o.visible !== false);
+    layersHtml += `
+      <div class="layer-item-card" data-layer="${escapeHtml(lName)}">
+        <div class="layer-item-info">
+          <span class="layer-dot"></span>
+          <span class="layer-name" title="${escapeHtml(lName)}">${escapeHtml(lName)}</span>
+          <span class="layer-count">${objs.length} contorno(s)</span>
+        </div>
+        <div class="layer-actions">
+          <button type="button" class="layer-vis-btn" data-layer="${escapeHtml(lName)}" title="${isVisible ? 'Ocultar Camada' : 'Mostrar Camada'}">
+            ${isVisible ? '👁️' : '🙈'}
+          </button>
+          <button type="button" class="layer-sel-btn" data-layer="${escapeHtml(lName)}" title="Selecionar todos os vetores desta camada">
+            🔳 Selecionar
+          </button>
+        </div>
+      </div>
+    `;
+  });
+  layersContainer.innerHTML = layersHtml;
+
+  // 2. Renderizar Contornos Individuais (Vector Tree)
+  const activeSet = new Set(canvas.getActiveObjects());
+
+  let vectorsHtml = '';
+  userObjects.forEach((obj, idx) => {
+    const isSelected = activeSet.has(obj);
+    const strat = obj.camStrategy || 'outside';
+    const stratInfo = {
+      outside: { color: '#38bdf8', badge: 'Exterior' },
+      inside:  { color: '#f59e0b', badge: 'Interior' },
+      pocket:  { color: '#10b981', badge: 'Pocket' },
+      chamfer: { color: '#a855f7', badge: 'Chanfro' },
+      on:      { color: '#ec4899', badge: 'Na Linha' }
+    }[strat] || { color: '#38bdf8', badge: strat };
+
+    const wMm = ((obj.getScaledWidth ? obj.getScaledWidth() : (obj.width || 0)) / ESCALA_MM_PX).toFixed(1);
+    const hMm = ((obj.getScaledHeight ? obj.getScaledHeight() : (obj.height || 0)) / ESCALA_MM_PX).toFixed(1);
+    const layerLabel = obj.layerName ? `📁 ${obj.layerName}` : '';
+    const objTitle = obj.type === 'rect' ? 'Retângulo' 
+      : obj.type === 'circle' ? 'Círculo' 
+      : obj.type === 'line' ? 'Linha' 
+      : (obj.camRole === 'exterior' ? 'Perfil Exterior' 
+      : (obj.camRole === 'pocket' ? 'Cavidade Interior' : `Contorno #${idx + 1}`));
+
+    vectorsHtml += `
+      <div class="vector-item-card ${isSelected ? 'active' : ''}" data-index="${idx}">
+        <div class="vector-item-header">
+          <div class="vector-item-main" data-index="${idx}">
+            <span class="vector-strategy-dot" style="background: ${stratInfo.color};"></span>
+            <strong class="vector-title">${escapeHtml(objTitle)}</strong>
+            <span class="vector-strategy-badge" style="color: ${stratInfo.color}; border-color: ${stratInfo.color}40; background: ${stratInfo.color}18;">${stratInfo.badge}</span>
+          </div>
+          <div class="vector-item-tools">
+            <button type="button" class="vec-btn-vis" data-index="${idx}" title="${obj.visible !== false ? 'Ocultar' : 'Mostrar'}">
+              ${obj.visible !== false ? '👁️' : '🙈'}
+            </button>
+            <button type="button" class="vec-btn-del" data-index="${idx}" title="Eliminar contorno">
+              🗑️
+            </button>
+          </div>
+        </div>
+        <div class="vector-item-meta" data-index="${idx}">
+          <span class="vec-dim">📏 ${wMm} × ${hMm} mm</span>
+          <span class="vec-layer">${escapeHtml(layerLabel)}</span>
+        </div>
+      </div>
+    `;
+  });
+  vectorsContainer.innerHTML = vectorsHtml;
 }
 
 /**
@@ -6181,6 +6583,7 @@ function setRightClickedObjectStrategy(strategyVal) {
   saveAppState();
   recordHistoryState();
   clearVisualToolpaths();
+  renderLayersAndVectorsList();
   showCamToast(`🎨 Contorno definido como: ${getStrategyLabel(strategyVal)}`);
 }
 
@@ -6199,9 +6602,10 @@ function hasMultipleSubpaths(pathObj) {
 
 /**
  * Separa os subcaminhos de um Fabric.Path em caminhos independentes editáveis
+ * Preserva coordenadas exatas no canvas através da matriz de transformação de mundo
  */
 function splitPathSubpaths(pathObj) {
-  if (!hasMultipleSubpaths(pathObj)) return;
+  if (!pathObj || !hasMultipleSubpaths(pathObj)) return;
   const cmds = pathObj.path;
   const subpathCmds = [];
   let cur = [];
@@ -6215,21 +6619,53 @@ function splitPathSubpaths(pathObj) {
   if (cur.length > 0) subpathCmds.push(cur);
   if (subpathCmds.length <= 1) return;
 
+  const matrix = pathObj.calcTransformMatrix();
+  const offX = pathObj.pathOffset ? pathObj.pathOffset.x : 0;
+  const offY = pathObj.pathOffset ? pathObj.pathOffset.y : 0;
+
+  const transformPt = (x, y) => {
+    const lx = parseFloat(x) - offX;
+    const ly = parseFloat(y) - offY;
+    return fabric.util.transformPoint(new fabric.Point(lx, ly), matrix);
+  };
+
   const createdPaths = [];
 
   subpathCmds.forEach((cmdList, idx) => {
-    const dStr = cmdList.map(c => c.join(' ')).join(' ');
+    const worldCmds = cmdList.map(cmd => {
+      const type = cmd[0];
+      if (type === 'M' || type === 'm') {
+        const p = transformPt(cmd[1], cmd[2]);
+        return ['M', p.x.toFixed(3), p.y.toFixed(3)];
+      } else if (type === 'L' || type === 'l') {
+        const p = transformPt(cmd[1], cmd[2]);
+        return ['L', p.x.toFixed(3), p.y.toFixed(3)];
+      } else if (type === 'C' || type === 'c') {
+        const c1 = transformPt(cmd[1], cmd[2]);
+        const c2 = transformPt(cmd[3], cmd[4]);
+        const end = transformPt(cmd[5], cmd[6]);
+        return ['C', c1.x.toFixed(3), c1.y.toFixed(3), c2.x.toFixed(3), c2.y.toFixed(3), end.x.toFixed(3), end.y.toFixed(3)];
+      } else if (type === 'Q' || type === 'q') {
+        const c1 = transformPt(cmd[1], cmd[2]);
+        const end = transformPt(cmd[3], cmd[4]);
+        return ['Q', c1.x.toFixed(3), c1.y.toFixed(3), end.x.toFixed(3), end.y.toFixed(3)];
+      } else if (type === 'Z' || type === 'z') {
+        return ['Z'];
+      }
+      return cmd;
+    });
+
+    const dStr = worldCmds.map(c => c.join(' ')).join(' ');
+    const strat = (idx === 0) ? (pathObj.camStrategy || 'outside') : 'pocket';
     const p = new fabric.Path(dStr, {
-      stroke: idx === 0 ? '#38bdf8' : '#10b981',
+      stroke: (strat === 'pocket') ? '#10b981' : '#38bdf8',
       fill: '',
       strokeWidth: pathObj.strokeWidth || 1.5,
       strokeUniform: true,
-      left: pathObj.left,
-      top: pathObj.top,
-      scaleX: pathObj.scaleX || 1,
-      scaleY: pathObj.scaleY || 1,
-      angle: pathObj.angle || 0,
-      camStrategy: idx === 0 ? 'outside' : 'pocket'
+      perPixelTargetFind: true,
+      targetFindTolerance: 8,
+      camStrategy: strat,
+      layerName: pathObj.layerName ? `${pathObj.layerName} #${idx + 1}` : `Contorno #${idx + 1}`
     });
     p.setCoords();
     canvas.add(p);
@@ -6241,7 +6677,9 @@ function splitPathSubpaths(pathObj) {
   canvas.setActiveObject(sel);
   canvas.requestRenderAll();
   saveAppState();
+  recordHistoryState();
   clearVisualToolpaths();
+  renderLayersAndVectorsList();
   showCamToast(`✂️ ${createdPaths.length} contornos e cavidades separados com sucesso! Podes agora selecionar cada um individualmente.`);
 }
 
@@ -6311,7 +6749,10 @@ function groupSelectedObjects() {
   canvas.discardActiveObject();
 
   const group = new fabric.Group(toGroup, {
-    strokeUniform: true
+    strokeUniform: true,
+    subTargetCheck: true,
+    perPixelTargetFind: true,
+    targetFindTolerance: 8
   });
 
   toGroup.forEach(obj => canvas.remove(obj));
@@ -6321,6 +6762,8 @@ function groupSelectedObjects() {
 
   clearVisualToolpaths();
   saveAppState();
+  recordHistoryState();
+  renderLayersAndVectorsList();
   showCamToast(`📦 ${toGroup.length} contornos agrupados!`);
 }
 
@@ -6329,23 +6772,78 @@ function groupSelectedObjects() {
  */
 function ungroupSelectedObject() {
   const activeObj = canvas.getActiveObject();
-  if (!activeObj) return;
+  if (!activeObj) {
+    explodeAllGroups();
+    return;
+  }
 
   // 1. Caso seja um Grupo Fabric.js
   if (activeObj.type === 'group') {
     const items = activeObj.getObjects();
+    items.forEach(child => {
+      child.set({ perPixelTargetFind: true, targetFindTolerance: 8, strokeUniform: true });
+    });
     activeObj.toActiveSelection();
+    canvas.discardActiveObject();
     canvas.requestRenderAll();
     saveAppState();
+    recordHistoryState();
     clearVisualToolpaths();
-    showCamToast(`🧩 ${items.length} contornos desagrupados com sucesso! Podes agora clicar em qualquer cavidade para definir desbaste ou chanfro.`);
+    renderLayersAndVectorsList();
+    showCamToast(`🧩 ${items.length} contornos desagrupados com sucesso! Podes agora clicar individualmente em qualquer linha.`);
     return;
   }
 
   // 2. Caso seja um Path com múltiplos subcaminhos
   if (activeObj.type === 'path' && hasMultipleSubpaths(activeObj)) {
     splitPathSubpaths(activeObj);
+    return;
   }
+
+  // 3. Caso seja ActiveSelection, verificar se há subcaminhos a separar
+  if (activeObj.type === 'activeSelection') {
+    let exploded = false;
+    activeObj.forEachObject(child => {
+      if (child.type === 'path' && hasMultipleSubpaths(child)) {
+        splitPathSubpaths(child);
+        exploded = true;
+      }
+    });
+    if (exploded) return;
+  }
+
+  explodeAllGroups();
+}
+
+/**
+ * Desagrupa todos os grupos e blocos presentes no canvas
+ */
+function explodeAllGroups() {
+  if (!canvas) return;
+  const groups = canvas.getObjects().filter(o => o.type === 'group');
+  if (groups.length === 0) {
+    const compPaths = canvas.getObjects().filter(o => o.type === 'path' && hasMultipleSubpaths(o));
+    if (compPaths.length > 0) {
+      compPaths.forEach(cp => splitPathSubpaths(cp));
+      showCamToast(`✂️ Separadas as cavidades de ${compPaths.length} contorno(s)!`);
+    } else {
+      showCamToast(`ℹ️ Todos os contornos já estão desagrupados e independentes.`);
+    }
+    return;
+  }
+
+  groups.forEach(g => {
+    const items = g.getObjects();
+    items.forEach(child => child.set({ perPixelTargetFind: true, targetFindTolerance: 8, strokeUniform: true }));
+    g.toActiveSelection();
+  });
+  canvas.discardActiveObject();
+  canvas.requestRenderAll();
+  saveAppState();
+  recordHistoryState();
+  clearVisualToolpaths();
+  renderLayersAndVectorsList();
+  showCamToast(`🧩 Todos os blocos foram desagrupados em linhas independentes!`);
 }
 
 /**

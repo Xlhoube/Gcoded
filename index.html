@@ -100,9 +100,9 @@
 
       <!-- Cluster 4: Sistema / PWA -->
       <div class="install-group" style="display: flex; gap: 0.45rem; align-items: center;">
-        <button id="btn-version-badge" class="action-btn version-badge-btn" title="Gcoded CAM v0.10.6 - Clica para ver notas de versão">
+        <button id="btn-version-badge" class="action-btn version-badge-btn" title="Gcoded CAM v0.10.7 - Clica para ver notas de versão">
           <span class="icon">🚀</span>
-          <span id="version-badge-text">v0.10.6</span>
+          <span id="version-badge-text">v0.10.7</span>
           <span id="version-pulse-dot" class="version-dot"></span>
         </button>
         <button id="btn-install-app" class="action-btn install-btn" title="Instalar Gcoded no computador ou telemóvel para acesso 100% offline">
@@ -195,6 +195,10 @@
           <button id="tab-btn-cam" class="sidebar-nav-tab active" role="tab" aria-selected="true" data-tab="cam">
             <span class="tab-icon">⚙️</span>
             <span class="tab-label">Percursos</span>
+          </button>
+          <button id="tab-btn-layers" class="sidebar-nav-tab" role="tab" aria-selected="false" data-tab="layers">
+            <span class="tab-icon">📑</span>
+            <span class="tab-label">Camadas</span>
           </button>
           <button id="tab-btn-material" class="sidebar-nav-tab" role="tab" aria-selected="false" data-tab="material">
             <span class="tab-icon">📐</span>
@@ -449,7 +453,55 @@
           </div>
         </div>
 
-        <!-- Conteúdo do Separador 2: Mesa & Chapa -->
+        <!-- Conteúdo do Separador 2: Camadas & Vetores (Vectric Layer Manager) -->
+        <div id="sidebar-content-layers" class="sidebar-tab-content" style="display: none;">
+          <!-- Barra de Ferramentas / Ações Rápidas de Seleção e Vetores -->
+          <div class="panel-section">
+            <div class="section-title-row">
+              <h2>Gestão de Camadas & Seleção</h2>
+              <span id="layers-summary-count" class="badge-subtle">0 contornos</span>
+            </div>
+            
+            <div class="quick-vector-actions" style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+              <button type="button" id="btn-select-all-vectors" class="secondary-btn" style="flex: 1; padding: 0.45rem 0.5rem; font-size: 0.78rem;" title="Selecionar todos os contornos na mesa">
+                🔳 Selec. Tudo
+              </button>
+              <button type="button" id="btn-deselect-all-vectors" class="secondary-btn" style="flex: 1; padding: 0.45rem 0.5rem; font-size: 0.78rem;" title="Desmarcar seleção">
+                ⬜ Desmarcar
+              </button>
+              <button type="button" id="btn-explode-all" class="secondary-btn" style="flex: 1; padding: 0.45rem 0.5rem; font-size: 0.78rem;" title="Desagrupar todos os blocos e grupos da mesa">
+                🧩 Desagrupar
+              </button>
+              <button type="button" id="btn-split-subpaths-trigger" class="secondary-btn" style="flex: 1; padding: 0.45rem 0.5rem; font-size: 0.78rem;" title="Separar cavidades de contornos compostos">
+                ✂️ Separar Cavidades
+              </button>
+            </div>
+          </div>
+
+          <!-- Lista de Camadas DXF / SVG -->
+          <div class="panel-section">
+            <div class="section-title-row">
+              <h2>Camadas do Desenho</h2>
+              <span style="font-size: 0.72rem; color: #94a3b8;">Visibilidade e seleção</span>
+            </div>
+            <div id="layers-list-container" class="layers-list-container">
+              <div class="empty-state-notice">Nenhum desenho na mesa. Importa um ficheiro DXF/SVG ou desenha formas para ver as camadas.</div>
+            </div>
+          </div>
+
+          <!-- Lista de Vetores e Contornos Individuais (Vector Tree) -->
+          <div class="panel-section">
+            <div class="section-title-row">
+              <h2>Lista de Contornos & Linhas</h2>
+              <span style="font-size: 0.72rem; color: #94a3b8;">Clica para selecionar no canvas</span>
+            </div>
+            <div id="vectors-list-container" class="vectors-list-container">
+              <div class="empty-state-notice">Nenhum vetor ativo no canvas.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Conteúdo do Separador 3: Mesa & Chapa -->
         <div id="sidebar-content-material" class="sidebar-tab-content" style="display: none;">
           <div class="panel-section">
             <h2>Dimensões da Mesa (mm)</h2>
@@ -992,14 +1044,14 @@
         <div class="update-header-info">
           <div class="update-tag-row">
             <span class="update-badge">NOVA VERSÃO</span>
-            <span id="update-version-label" class="update-version-text">v0.10.6</span>
+            <span id="update-version-label" class="update-version-text">v0.10.7</span>
           </div>
           <h4 id="update-popup-title" class="update-title">Atualização Disponível!</h4>
         </div>
         <button id="btn-close-update-popup" class="update-close-btn" title="Lembrar mais tarde">✕</button>
       </div>
       <p id="update-popup-desc" class="update-desc">
-        Foi descarregada uma nova versão do Gcoded com menus e painéis simplificados ao estilo Vectric VCarve (separadores organizados, grelha visual de estratégias e ações fixas).
+        Foi descarregada uma nova versão do Gcoded com Gestor de Camadas e Vetores (Vectric style), seleção direta de linhas e cavidades no canvas e separação de contornos compostos.
       </p>
       <div class="update-actions">
         <button id="btn-update-now" class="update-cta-btn">
@@ -1025,7 +1077,7 @@
           <div style="flex: 1;">
             <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.2rem;">
               <h3 style="margin: 0; color: #ffffff; font-size: 1.1rem;">Gcoded CAM Offline</h3>
-              <span class="update-badge" style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.4); color: #34d399;">v0.10.6</span>
+              <span class="update-badge" style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.4); color: #34d399;">v0.10.7</span>
             </div>
             <p style="margin: 0; font-size: 0.82rem; color: #94a3b8; line-height: 1.4;">
               A tua aplicação atualiza-se de forma autónoma através do Service Worker, preservando os teus desenhos e definições locais.
@@ -1037,8 +1089,18 @@
         <div class="update-changelog-list">
           <div class="changelog-item">
             <div class="changelog-header">
-              <span class="changelog-ver">v0.10.6</span>
+              <span class="changelog-ver">v0.10.7</span>
               <span class="changelog-tag" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">Atual</span>
+            </div>
+            <div class="changelog-title">📑 Gestor de Camadas e Seleção Precisa de Contornos</div>
+            <div class="changelog-body">
+              Novo separador de Camadas & Vetores estilo Vectric VCarve; deteção de clique por pixel no canvas (per-pixel hit testing) que permite selecionar cavidades interiores sem bloqueio pela caixa envolvente exterior; importação DXF com preservação de camadas e linhas independentes; ferramenta de separação rápida de contornos compostos.
+            </div>
+          </div>
+
+          <div class="changelog-item">
+            <div class="changelog-header">
+              <span class="changelog-ver">v0.10.6</span>
             </div>
             <div class="changelog-title">📐 Menus Ergonómicos Estilo Vectric VCarve</div>
             <div class="changelog-body">
@@ -1101,7 +1163,7 @@
     </div>
   </div>
 
-  <script type="module" src="./src/app.js?v=0.10.6"></script>
+  <script type="module" src="./src/app.js?v=0.10.7"></script>
 </body>
 
 </html>

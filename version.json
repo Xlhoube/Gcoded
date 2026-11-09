@@ -1,14 +1,13 @@
 {
-  "version": "0.10.6",
+  "version": "0.10.7",
   "name": "Gcoded CAM",
-  "build": "20261109-06",
-  "updatedAt": "2026-11-09T07:55:00Z",
+  "build": "20261109-07",
+  "updatedAt": "2026-11-09T08:15:00Z",
   "highlights": [
-    "📐 Interface Ergonómica Estilo Vectric VCarve: Menus e botões organizados de forma limpa e intuitiva",
-    "🗂️ Painel Lateral por Separadores: Percursos CAM, Mesa & Chapa e Consola G-code",
-    "🎨 Grelha Visual de Estratégias (Vectric Style): Botões com ícones e badges para Exterior (+R), Interior (-R), Pocket, Chanfro e Gravação",
-    "📌 Barra de Ações Fixa (Sticky Footer): Botões 'Gerar Trajetória', 'Simulador 3D' e 'Guardar G-code' sempre visíveis sem scroll",
-    "🛠️ Barra Superior em Clusters Funcionais: Desenho, Vetores & Ficheiros, Ações & Histórico e Sistema",
-    "🗑️ Limpeza de Mesa Instantânea e Histórico Global Ctrl+Z / Ctrl+Y"
+    "📑 Gestor de Camadas e Vetores (Vectric Style): Novo separador dedicado com lista interativa de camadas DXF/SVG e contornos individuais",
+    "🎯 Seleção Direta e Precisa no Canvas: Deteção de clique por pixel (per-pixel hit testing) que permite selecionar cavidades interiores sem bloqueio da moldura exterior",
+    "📂 Importação DXF por Camadas: Preservação de camadas (código 8 DXF) sem junção forçada de geometrias e sem blocos bloqueados",
+    "✂️ Separação de Cavidades e Contornos Compostos: Desdobramento automático de geometrias complexas em contornos editáveis independentes",
+    "👁️ Controlo Individual de Visibilidade e Seleção: Ocultar, mostrar e focar contornos e camadas com 1 clique"
   ]
 }
