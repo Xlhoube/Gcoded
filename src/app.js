@@ -33,7 +33,7 @@ let btnInstallApp, btnModalInstallAction, installModal, btnCloseInstall, btnClos
 // Inputs de Parâmetros
 let inputToolDia, inputSafeZ, inputFeedXY, inputFeedZ, inputDepthTotal, inputDepthPass, selectStrategy;
 let inputTableX, inputTableY, inputMaterialZ, selectOriginType, inputWcsX, inputWcsY;
-let contextMenu, ctxSendToOrigin, ctxDelete, ctxGroup, ctxUngroup;
+let contextMenu, ctxSendToOrigin, ctxDelete, ctxGroup, ctxUngroup, ctxDuplicate;
 let ctxStrategyPocket, ctxStrategyChamfer, ctxStrategyOutside, ctxStrategyInside, ctxStrategyOn, ctxSplitSubpaths;
 let rightClickedObject = null;
 let btnUngroup = null;
@@ -168,6 +168,7 @@ function cacheUIElements() {
 
   contextMenu = document.getElementById('context-menu');
   ctxSendToOrigin = document.getElementById('ctx-send-to-origin');
+  ctxDuplicate = document.getElementById('ctx-duplicate');
   ctxDelete = document.getElementById('ctx-delete');
   ctxGroup = document.getElementById('ctx-group');
   ctxUngroup = document.getElementById('ctx-ungroup');
@@ -1888,6 +1889,13 @@ function setupEventListeners() {
     hideContextMenu();
   });
 
+  if (ctxDuplicate) {
+    ctxDuplicate.addEventListener('click', () => {
+      duplicateSelectedObject(rightClickedObject);
+      hideContextMenu();
+    });
+  }
+
   ctxGroup.addEventListener('click', () => {
     groupSelectedObjects();
     hideContextMenu();
@@ -1973,6 +1981,13 @@ function setupEventListeners() {
   if (tabBtnGcode) tabBtnGcode.addEventListener('click', () => switchSidebarTab('gcode'));
 
   // Ações Rápidas de Vetores e Camadas (Aba Camadas)
+  const btnDuplicateVector = document.getElementById('btn-duplicate-vector');
+  if (btnDuplicateVector) {
+    btnDuplicateVector.addEventListener('click', () => {
+      duplicateSelectedObject();
+    });
+  }
+
   const btnSelectAllVectors = document.getElementById('btn-select-all-vectors');
   if (btnSelectAllVectors) {
     btnSelectAllVectors.addEventListener('click', () => {
@@ -2089,6 +2104,17 @@ function setupEventListeners() {
           canvas.requestRenderAll();
           saveAppState();
           renderLayersAndVectorsList();
+        }
+        return;
+      }
+
+      const dupBtn = e.target.closest('.vec-btn-dup');
+      if (dupBtn) {
+        const idx = parseInt(dupBtn.getAttribute('data-index'), 10);
+        const userObjs = canvas.getObjects().filter(o => !o.isOriginMarker && !o.isVisualPath);
+        const obj = userObjs[idx];
+        if (obj) {
+          duplicateSelectedObject(obj);
         }
         return;
       }
@@ -2929,6 +2955,13 @@ function handleKeyDown(e) {
   if (isCtrlOrCmd && (e.key === 'y' || e.key === 'Y')) {
     e.preventDefault();
     redoCanvas();
+    return;
+  }
+
+  // Atalho DUPLICAR CONTORNO: Ctrl+D / Cmd+D
+  if (isCtrlOrCmd && (e.key === 'd' || e.key === 'D')) {
+    e.preventDefault();
+    duplicateSelectedObject();
     return;
   }
 
@@ -4724,9 +4757,38 @@ function generateGCode() {
       }
     });
 
+    // Ordenação Inteligente de Maquinação CNC:
+    // 1. POCKET: Desbaste de cavidades e caixas interiores
+    // 2. INSIDE: Furos e perfis internos
+    // 3. ON: Gravação e detalhe sobre a linha
+    // 4. CHAMFER: Chanfro das arestas (realizado após o desbaste)
+    // 5. OUTSIDE: Recorte do perfil exterior da peça
+    const strategyPriority = {
+      pocket: 10,
+      inside: 20,
+      on: 30,
+      chamfer: 40,
+      outside: 50
+    };
+    contourItems.sort((a, b) => {
+      const pA = strategyPriority[a.camStrategy] || 25;
+      const pB = strategyPriority[b.camStrategy] || 25;
+      return pA - pB;
+    });
+
+    let lastOperationStrategy = null;
+
     contourItems.forEach((item) => {
       const obj = item.obj;
       const curStrategy = item.camStrategy || strategy;
+
+      if (curStrategy !== lastOperationStrategy) {
+        lastOperationStrategy = curStrategy;
+        const stratLabel = getStrategyLabel(curStrategy).toUpperCase();
+        gcode.push(`\n(========================================)`);
+        gcode.push(`( FASE CNC: ${stratLabel} )`);
+        gcode.push(`(========================================)`);
+      }
       const matrix = item.parentGroup 
         ? fabric.util.multiplyTransformMatrices(item.groupMatrix, obj.calcTransformMatrix())
         : obj.calcTransformMatrix();
@@ -6549,6 +6611,9 @@ function renderLayersAndVectorsList() {
             <span class="vector-strategy-badge" style="color: ${stratInfo.color}; border-color: ${stratInfo.color}40; background: ${stratInfo.color}18;">${stratInfo.badge}</span>
           </div>
           <div class="vector-item-tools">
+            <button type="button" class="vec-btn-dup" data-index="${idx}" title="Duplicar contorno no mesmo sítio para Chanfro ou Desbaste (Ctrl+D)">
+              📑
+            </button>
             <button type="button" class="vec-btn-vis" data-index="${idx}" title="${obj.visible !== false ? 'Ocultar' : 'Mostrar'}">
               ${obj.visible !== false ? '👁️' : '🙈'}
             </button>
@@ -6585,6 +6650,81 @@ function setRightClickedObjectStrategy(strategyVal) {
   clearVisualToolpaths();
   renderLayersAndVectorsList();
   showCamToast(`🎨 Contorno definido como: ${getStrategyLabel(strategyVal)}`);
+}
+
+/**
+ * Duplica o contorno selecionado (ou clicado com o botão direito) exatamente na mesma posição
+ * Permite ter múltiplas operações CAM no mesmo vetor (ex: Desbaste no interior + Chanfro na aresta)
+ */
+function duplicateSelectedObject(targetObj) {
+  const obj = targetObj || rightClickedObject || canvas.getActiveObject();
+  if (!obj || obj.isOriginMarker || obj.isVisualPath) {
+    showCamToast('ℹ️ Seleciona um contorno para duplicar.');
+    return;
+  }
+
+  // Se for uma seleção múltipla
+  if (obj.type === 'activeSelection') {
+    const clones = [];
+    obj.forEachObject(child => {
+      child.clone(cloned => {
+        const nextStrat = (child.camStrategy === 'pocket' || child.camStrategy === 'outside') ? 'chamfer' : (child.camStrategy === 'chamfer' ? 'pocket' : 'chamfer');
+        cloned.set({
+          selectable: true,
+          evented: true,
+          perPixelTargetFind: true,
+          targetFindTolerance: 8,
+          strokeUniform: true,
+          layerName: child.layerName ? `${child.layerName} (${getStrategyLabel(nextStrat)})` : `Contorno (${getStrategyLabel(nextStrat)})`,
+          camStrategy: nextStrat
+        });
+        if (nextStrat === 'pocket') cloned.set('stroke', '#10b981');
+        else if (nextStrat === 'chamfer') cloned.set('stroke', '#a855f7');
+        else if (nextStrat === 'inside') cloned.set('stroke', '#f59e0b');
+        else cloned.set('stroke', '#38bdf8');
+
+        cloned.setCoords();
+        canvas.add(cloned);
+        clones.push(cloned);
+      });
+    });
+    const sel = new fabric.ActiveSelection(clones, { canvas });
+    canvas.setActiveObject(sel);
+    canvas.requestRenderAll();
+    saveAppState();
+    recordHistoryState();
+    renderLayersAndVectorsList();
+    showCamToast(`📑 ${clones.length} contornos duplicados! Podes atribuir uma segunda função (ex: Chanfro ou Desbaste).`);
+    return;
+  }
+
+  // Se for um único contorno
+  obj.clone(cloned => {
+    const nextStrat = (obj.camStrategy === 'pocket' || obj.camStrategy === 'outside') ? 'chamfer' : (obj.camStrategy === 'chamfer' ? 'pocket' : 'chamfer');
+    cloned.set({
+      selectable: true,
+      evented: true,
+      perPixelTargetFind: true,
+      targetFindTolerance: 8,
+      strokeUniform: true,
+      layerName: obj.layerName ? `${obj.layerName} (${getStrategyLabel(nextStrat)})` : `Contorno (${getStrategyLabel(nextStrat)})`,
+      camStrategy: nextStrat
+    });
+    if (nextStrat === 'pocket') cloned.set('stroke', '#10b981');
+    else if (nextStrat === 'chamfer') cloned.set('stroke', '#a855f7');
+    else if (nextStrat === 'inside') cloned.set('stroke', '#f59e0b');
+    else cloned.set('stroke', '#38bdf8');
+
+    cloned.setCoords();
+    canvas.add(cloned);
+    canvas.setActiveObject(cloned);
+    canvas.requestRenderAll();
+    saveAppState();
+    recordHistoryState();
+    renderLayersAndVectorsList();
+    syncStrategyUI(nextStrat, false);
+    showCamToast(`📑 Contorno duplicado na mesma posição! Atribuído automaticamente como: ${getStrategyLabel(nextStrat)}.`);
+  });
 }
 
 /**
@@ -6715,8 +6855,9 @@ function showContextMenu(e, obj) {
     ctxRedo.style.pointerEvents = (redoStack.length > 0) ? 'auto' : 'none';
   }
 
-  // Mostrar opções de estratégia apenas se for uma forma real
+  // Mostrar opções de estratégia e duplicação apenas se for uma forma real
   const isRealShape = obj && !obj.isOriginMarker && !obj.isVisualPath;
+  if (ctxDuplicate) ctxDuplicate.style.display = isRealShape ? 'block' : 'none';
   [ctxStrategyPocket, ctxStrategyChamfer, ctxStrategyOutside, ctxStrategyInside, ctxStrategyOn].forEach(el => {
     if (el) el.style.display = isRealShape ? 'block' : 'none';
   });

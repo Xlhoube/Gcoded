@@ -573,6 +573,7 @@ button:disabled {
 .layer-vis-btn,
 .layer-sel-btn,
 .vec-btn-vis,
+.vec-btn-dup,
 .vec-btn-del {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--panel-border);
@@ -590,6 +591,12 @@ button:disabled {
 .layer-vis-btn:hover,
 .vec-btn-vis:hover {
   background: rgba(255, 255, 255, 0.15);
+}
+
+.vec-btn-dup:hover {
+  background: rgba(56, 189, 248, 0.25);
+  color: #38bdf8;
+  border-color: #38bdf8;
 }
 
 .layer-sel-btn:hover {

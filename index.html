@@ -100,9 +100,9 @@
 
       <!-- Cluster 4: Sistema / PWA -->
       <div class="install-group" style="display: flex; gap: 0.45rem; align-items: center;">
-        <button id="btn-version-badge" class="action-btn version-badge-btn" title="Gcoded CAM v0.10.7 - Clica para ver notas de versão">
+        <button id="btn-version-badge" class="action-btn version-badge-btn" title="Gcoded CAM v0.10.8 - Clica para ver notas de versão">
           <span class="icon">🚀</span>
-          <span id="version-badge-text">v0.10.7</span>
+          <span id="version-badge-text">v0.10.8</span>
           <span id="version-pulse-dot" class="version-dot"></span>
         </button>
         <button id="btn-install-app" class="action-btn install-btn" title="Instalar Gcoded no computador ou telemóvel para acesso 100% offline">
@@ -463,17 +463,20 @@
             </div>
             
             <div class="quick-vector-actions" style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
-              <button type="button" id="btn-select-all-vectors" class="secondary-btn" style="flex: 1; padding: 0.45rem 0.5rem; font-size: 0.78rem;" title="Selecionar todos os contornos na mesa">
-                🔳 Selec. Tudo
+              <button type="button" id="btn-duplicate-vector" class="secondary-btn" style="flex: 1 1 45%; padding: 0.45rem 0.5rem; font-size: 0.78rem;" title="Duplicar o contorno selecionado no mesmo sítio para Chanfro ou Desbaste (Ctrl+D)">
+                📑 Duplicar (Ctrl+D)
               </button>
-              <button type="button" id="btn-deselect-all-vectors" class="secondary-btn" style="flex: 1; padding: 0.45rem 0.5rem; font-size: 0.78rem;" title="Desmarcar seleção">
-                ⬜ Desmarcar
-              </button>
-              <button type="button" id="btn-explode-all" class="secondary-btn" style="flex: 1; padding: 0.45rem 0.5rem; font-size: 0.78rem;" title="Desagrupar todos os blocos e grupos da mesa">
+              <button type="button" id="btn-explode-all" class="secondary-btn" style="flex: 1 1 45%; padding: 0.45rem 0.5rem; font-size: 0.78rem;" title="Desagrupar todos os blocos e grupos da mesa">
                 🧩 Desagrupar
               </button>
-              <button type="button" id="btn-split-subpaths-trigger" class="secondary-btn" style="flex: 1; padding: 0.45rem 0.5rem; font-size: 0.78rem;" title="Separar cavidades de contornos compostos">
+              <button type="button" id="btn-split-subpaths-trigger" class="secondary-btn" style="flex: 1 1 45%; padding: 0.45rem 0.5rem; font-size: 0.78rem;" title="Separar cavidades de contornos compostos">
                 ✂️ Separar Cavidades
+              </button>
+              <button type="button" id="btn-select-all-vectors" class="secondary-btn" style="flex: 1 1 20%; padding: 0.45rem 0.5rem; font-size: 0.78rem;" title="Selecionar todos os contornos na mesa">
+                🔳 Tudo
+              </button>
+              <button type="button" id="btn-deselect-all-vectors" class="secondary-btn" style="flex: 1 1 20%; padding: 0.45rem 0.5rem; font-size: 0.78rem;" title="Desmarcar seleção">
+                ⬜ Desmarcar
               </button>
             </div>
           </div>
@@ -1014,6 +1017,7 @@
       <li id="ctx-undo">↩️ Desfazer (Ctrl+Z)</li>
       <li id="ctx-redo">↪️ Refazer (Ctrl+Y)</li>
       <li id="ctx-send-to-origin">📍 Enviar para Origem da Mesa</li>
+      <li id="ctx-duplicate">📑 Duplicar Contorno (Ctrl+D)</li>
       <li id="ctx-strategy-pocket">🟩 Atribuir: Desbaste Interior (Pocket)</li>
       <li id="ctx-strategy-chamfer">🟪 Atribuir: Chanfro nas Arestas (Bisel)</li>
       <li id="ctx-strategy-outside">🟦 Atribuir: Perfil Exterior (+R)</li>
@@ -1044,14 +1048,14 @@
         <div class="update-header-info">
           <div class="update-tag-row">
             <span class="update-badge">NOVA VERSÃO</span>
-            <span id="update-version-label" class="update-version-text">v0.10.7</span>
+            <span id="update-version-label" class="update-version-text">v0.10.8</span>
           </div>
           <h4 id="update-popup-title" class="update-title">Atualização Disponível!</h4>
         </div>
         <button id="btn-close-update-popup" class="update-close-btn" title="Lembrar mais tarde">✕</button>
       </div>
       <p id="update-popup-desc" class="update-desc">
-        Foi descarregada uma nova versão do Gcoded com Gestor de Camadas e Vetores (Vectric style), seleção direta de linhas e cavidades no canvas e separação de contornos compostos.
+        Nova versão do Gcoded com suporte a múltiplas operações no mesmo vetor: duplicação no mesmo sítio (Ctrl+D) para Chanfro e Desbaste, e sequenciamento inteligente de fases CNC no G-code!
       </p>
       <div class="update-actions">
         <button id="btn-update-now" class="update-cta-btn">
@@ -1077,7 +1081,7 @@
           <div style="flex: 1;">
             <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.2rem;">
               <h3 style="margin: 0; color: #ffffff; font-size: 1.1rem;">Gcoded CAM Offline</h3>
-              <span class="update-badge" style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.4); color: #34d399;">v0.10.7</span>
+              <span class="update-badge" style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.4); color: #34d399;">v0.10.8</span>
             </div>
             <p style="margin: 0; font-size: 0.82rem; color: #94a3b8; line-height: 1.4;">
               A tua aplicação atualiza-se de forma autónoma através do Service Worker, preservando os teus desenhos e definições locais.
@@ -1089,8 +1093,18 @@
         <div class="update-changelog-list">
           <div class="changelog-item">
             <div class="changelog-header">
-              <span class="changelog-ver">v0.10.7</span>
+              <span class="changelog-ver">v0.10.8</span>
               <span class="changelog-tag" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">Atual</span>
+            </div>
+            <div class="changelog-title">📑 Múltiplas Operações no Mesmo Vetor (Duplicar Ctrl+D)</div>
+            <div class="changelog-body">
+              Permite duplicar qualquer contorno no mesmo sítio para aplicar operações combinadas (ex: Desbaste no interior + Chanfro na aresta); sequenciamento automático de fases CNC no G-code (1º Pocket, 2º Perfis interiores, 3º Gravação, 4º Chanfros, 5º Recorte exterior) e comentários de fase legíveis na máquina.
+            </div>
+          </div>
+
+          <div class="changelog-item">
+            <div class="changelog-header">
+              <span class="changelog-ver">v0.10.7</span>
             </div>
             <div class="changelog-title">📑 Gestor de Camadas e Seleção Precisa de Contornos</div>
             <div class="changelog-body">
@@ -1163,7 +1177,7 @@
     </div>
   </div>
 
-  <script type="module" src="./src/app.js?v=0.10.7"></script>
+  <script type="module" src="./src/app.js?v=0.10.8"></script>
 </body>
 
 </html>
