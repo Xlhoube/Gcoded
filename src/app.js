@@ -37,6 +37,7 @@ let contextMenu, ctxSendToOrigin, ctxDelete, ctxGroup, ctxUngroup;
 let ctxStrategyPocket, ctxStrategyChamfer, ctxStrategyOutside, ctxStrategyInside, ctxStrategyOn, ctxSplitSubpaths;
 let rightClickedObject = null;
 let btnUngroup = null;
+let btnUndo = null, btnRedo = null, ctxUndo = null, ctxRedo = null;
 
 // Parâmetros de Chanfro nas Arestas (Chamfer)
 let inputChamferWidth, paramChamferAngle, paramChamferSide, paramChamferTipOffset, chamferSettingsGrid, lblChamferDepthCalc;
@@ -120,7 +121,9 @@ function init() {
   initToolLibrary(); // Inicializar biblioteca de ferramentas
   setupEventListeners();
   setupPWAInstall(); // Configurar suporte de instalação PWA e offline
-  loadAppState();
+  loadAppState().then(() => {
+    initHistory();
+  });
 }
 
 /**
@@ -173,6 +176,11 @@ function cacheUIElements() {
   ctxStrategyOn = document.getElementById('ctx-strategy-on');
   ctxSplitSubpaths = document.getElementById('ctx-split-subpaths');
   btnUngroup = document.getElementById('btn-ungroup');
+
+  btnUndo = document.getElementById('btn-undo');
+  btnRedo = document.getElementById('btn-redo');
+  ctxUndo = document.getElementById('ctx-undo');
+  ctxRedo = document.getElementById('ctx-redo');
 
   // Inputs e Parâmetros da Fresa (CNC Router)
   inputToolDia = document.getElementById('param-tool-dia');
@@ -1630,6 +1638,12 @@ function setupEventListeners() {
   btnDelete.addEventListener('click', deleteSelectedObject);
   btnClear.addEventListener('click', clearCanvas);
 
+  // Ações de Desfazer e Refazer (Undo / Redo - Ctrl+Z / Ctrl+Y)
+  if (btnUndo) btnUndo.addEventListener('click', undoCanvas);
+  if (btnRedo) btnRedo.addEventListener('click', redoCanvas);
+  if (ctxUndo) ctxUndo.addEventListener('click', () => { hideContextMenu(); undoCanvas(); });
+  if (ctxRedo) ctxRedo.addEventListener('click', () => { hideContextMenu(); redoCanvas(); });
+
   // Importação (DXF, SVG, PNG, JPG) e Caixa de Importação / Drop
   if (btnImportTrigger && importModal) {
     btnImportTrigger.addEventListener('click', () => {
@@ -1835,21 +1849,24 @@ function setupEventListeners() {
   canvas.on('selection:updated', updateSelectionState);
   canvas.on('selection:cleared', updateSelectionState);
 
-  // Limpar percursos de simulação antigos e guardar estado quando o canvas muda (apenas para formas reais)
+  // Limpar percursos de simulação antigos, guardar estado e registar histórico Undo/Redo
   canvas.on('object:modified', (e) => {
     if (e.target && (e.target.isVisualPath || e.target.isOriginMarker)) return;
     clearVisualToolpaths();
     saveAppState();
+    recordHistoryState();
   });
   canvas.on('object:added', (e) => {
     if (e.target && (e.target.isVisualPath || e.target.isOriginMarker)) return;
     clearVisualToolpaths();
     saveAppState();
+    recordHistoryState();
   });
   canvas.on('object:removed', (e) => {
     if (e.target && (e.target.isVisualPath || e.target.isOriginMarker)) return;
     clearVisualToolpaths();
     saveAppState();
+    recordHistoryState();
   });
 
   // Finalização global de arrasto fora do canvas
@@ -1946,6 +1963,7 @@ function setupEventListeners() {
         }
         canvas.requestRenderAll();
         saveAppState();
+        recordHistoryState();
         clearVisualToolpaths();
         showCamToast(`🎨 Contorno definido como: ${getStrategyLabel(val)}`);
       }
@@ -2442,13 +2460,298 @@ function handleWindowMouseUp() {
   }
 }
 
+/* ==========================================================================
+   SISTEMA DE HISTÓRICO UNDO / REDO (Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z)
+   ========================================================================== */
+
+const MAX_UNDO_STACK = 50;
+let undoStack = [];
+let redoStack = [];
+let isUndoRedoAction = false;
+let lastSnapshotStr = null;
+let historyDebounceTimer = null;
+
 /**
- * Trata eventos de teclas de atalho globais (ex: Delete para remover objectos)
+ * Serializa de forma limpa todos os contornos e relevos para uma string JSON
+ */
+function serializeCanvasSnapshot() {
+  if (!canvas) return '{"objects":[],"reliefs":[]}';
+  const rawObjects = canvas.getObjects().filter(obj => !obj.isVisualPath && !obj.isOriginMarker);
+  const vectorObjects = rawObjects.filter(obj => !obj.isReliefImage);
+  const reliefObjects = rawObjects.filter(obj => obj.isReliefImage);
+
+  const objectsJson = vectorObjects.map(obj => obj.toObject([
+    'selectable', 'evented', 'stroke', 'strokeWidth', 'strokeUniform', 'camStrategy', 'camRole'
+  ]));
+
+  const reliefsData = reliefObjects.map(obj => ({
+    reliefId: obj.reliefId,
+    left: obj.left,
+    top: obj.top,
+    scaleX: obj.scaleX,
+    scaleY: obj.scaleY,
+    width: obj.width,
+    height: obj.height,
+    reliefSettings: obj.reliefSettings,
+    reliefDepthMap: obj.reliefDepthMap,
+    reliefDepthWidth: obj.reliefDepthWidth,
+    reliefDepthHeight: obj.reliefDepthHeight,
+    reliefSrc: obj.reliefSrc
+  }));
+
+  return JSON.stringify({
+    objects: objectsJson,
+    reliefs: reliefsData
+  });
+}
+
+/**
+ * Atualiza o estado visual (ativo / desativado) dos botões de Desfazer e Refazer
+ */
+function updateUndoRedoButtons() {
+  const canUndo = undoStack.length > 1;
+  const canRedo = redoStack.length > 0;
+
+  if (btnUndo) {
+    if (canUndo) {
+      btnUndo.classList.remove('disabled');
+      btnUndo.removeAttribute('disabled');
+      btnUndo.title = `Desfazer última alteração (Ctrl+Z) [${undoStack.length - 1} passos disponíveis]`;
+    } else {
+      btnUndo.classList.add('disabled');
+      btnUndo.setAttribute('disabled', 'true');
+      btnUndo.title = "Nada para desfazer (Ctrl+Z)";
+    }
+  }
+
+  if (btnRedo) {
+    if (canRedo) {
+      btnRedo.classList.remove('disabled');
+      btnRedo.removeAttribute('disabled');
+      btnRedo.title = `Refazer alteração desfeita (Ctrl+Y ou Ctrl+Shift+Z) [${redoStack.length} passos disponíveis]`;
+    } else {
+      btnRedo.classList.add('disabled');
+      btnRedo.setAttribute('disabled', 'true');
+      btnRedo.title = "Nada para refazer (Ctrl+Y)";
+    }
+  }
+
+  if (ctxUndo) {
+    ctxUndo.style.opacity = canUndo ? '1' : '0.4';
+    ctxUndo.style.pointerEvents = canUndo ? 'auto' : 'none';
+  }
+  if (ctxRedo) {
+    ctxRedo.style.opacity = canRedo ? '1' : '0.4';
+    ctxRedo.style.pointerEvents = canRedo ? 'auto' : 'none';
+  }
+}
+
+/**
+ * Regista o estado atual do canvas na pilha de histórico (com debounce para agrupar ações compostas)
+ */
+function recordHistoryState(immediate = false) {
+  if (isUndoRedoAction || isRestoringState) return;
+
+  const pushSnapshot = () => {
+    if (isUndoRedoAction || isRestoringState) return;
+    const current = serializeCanvasSnapshot();
+    if (current === lastSnapshotStr) return;
+
+    undoStack.push(current);
+    if (undoStack.length > MAX_UNDO_STACK) {
+      undoStack.shift();
+    }
+    // Qualquer nova ação limpa a pilha de Redo
+    redoStack = [];
+    lastSnapshotStr = current;
+    updateUndoRedoButtons();
+  };
+
+  if (immediate) {
+    if (historyDebounceTimer) clearTimeout(historyDebounceTimer);
+    pushSnapshot();
+  } else {
+    if (historyDebounceTimer) clearTimeout(historyDebounceTimer);
+    historyDebounceTimer = setTimeout(pushSnapshot, 120);
+  }
+}
+
+/**
+ * Inicializa a pilha de histórico após o carregamento inicial da aplicação
+ */
+function initHistory() {
+  undoStack = [];
+  redoStack = [];
+  const initial = serializeCanvasSnapshot();
+  undoStack.push(initial);
+  lastSnapshotStr = initial;
+  updateUndoRedoButtons();
+}
+
+/**
+ * Restaura o canvas a partir de um snapshot do histórico
+ */
+function restoreCanvasFromSnapshot(jsonStr) {
+  return new Promise((resolve) => {
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonStr || '{}');
+    } catch (e) {
+      console.error("Erro ao ler snapshot de histórico:", e);
+      resolve();
+      return;
+    }
+
+    clearVisualToolpaths();
+    canvas.discardActiveObject();
+
+    // 1. Remover todos os objetos exceto o marcador de origem
+    const existing = canvas.getObjects().slice();
+    existing.forEach(obj => {
+      if (!obj.isOriginMarker) {
+        canvas.remove(obj);
+      }
+    });
+
+    const objectsData = parsed.objects || [];
+    const reliefsData = parsed.reliefs || [];
+
+    // 2. Restaurar objetos vectoriais com enlivenObjects
+    fabric.util.enlivenObjects(objectsData, (enlivenedObjects) => {
+      enlivenedObjects.forEach(obj => {
+        obj.set({
+          selectable: true,
+          evented: true
+        });
+        canvas.add(obj);
+      });
+
+      // 3. Restaurar objetos de relevo 3D se existirem
+      if (reliefsData.length === 0) {
+        renderOriginMarker();
+        canvas.requestRenderAll();
+        resolve();
+      } else {
+        let loadedCount = 0;
+        reliefsData.forEach(meta => {
+          if (!meta.reliefSrc) {
+            loadedCount++;
+            if (loadedCount === reliefsData.length) {
+              renderOriginMarker();
+              canvas.requestRenderAll();
+              resolve();
+            }
+            return;
+          }
+          fabric.Image.fromURL(meta.reliefSrc, (fabricImg) => {
+            fabricImg.set({
+              left: meta.left,
+              top: meta.top,
+              scaleX: meta.scaleX,
+              scaleY: meta.scaleY,
+              originX: 'left',
+              originY: 'top',
+              opacity: 0.9,
+              borderColor: '#8b5cf6',
+              cornerColor: '#8b5cf6'
+            });
+            fabricImg.isReliefImage = true;
+            fabricImg.reliefId = meta.reliefId;
+            fabricImg.reliefSettings = meta.reliefSettings;
+            fabricImg.reliefDepthMap = meta.reliefDepthMap;
+            fabricImg.reliefDepthWidth = meta.reliefDepthWidth;
+            fabricImg.reliefDepthHeight = meta.reliefDepthHeight;
+            fabricImg.reliefSrc = meta.reliefSrc;
+
+            canvas.add(fabricImg);
+            loadedCount++;
+            if (loadedCount === reliefsData.length) {
+              renderOriginMarker();
+              canvas.requestRenderAll();
+              resolve();
+            }
+          });
+        });
+      }
+    });
+  });
+}
+
+/**
+ * Desfaz a última ação (Ctrl+Z)
+ */
+async function undoCanvas() {
+  if (undoStack.length <= 1) {
+    showCamToast("ℹ️ Nada mais para desfazer");
+    return;
+  }
+
+  isUndoRedoAction = true;
+  const current = undoStack.pop();
+  redoStack.push(current);
+
+  const prev = undoStack[undoStack.length - 1];
+  lastSnapshotStr = prev;
+
+  await restoreCanvasFromSnapshot(prev);
+  isUndoRedoAction = false;
+
+  updateUndoRedoButtons();
+  updateSelectionState();
+  saveAppState();
+  showCamToast("↩️ Ação desfeita (Undo)");
+}
+
+/**
+ * Refaz a ação desfeita (Ctrl+Y ou Ctrl+Shift+Z)
+ */
+async function redoCanvas() {
+  if (redoStack.length === 0) {
+    showCamToast("ℹ️ Nada mais para refazer");
+    return;
+  }
+
+  isUndoRedoAction = true;
+  const next = redoStack.pop();
+  undoStack.push(next);
+  lastSnapshotStr = next;
+
+  await restoreCanvasFromSnapshot(next);
+  isUndoRedoAction = false;
+
+  updateUndoRedoButtons();
+  updateSelectionState();
+  saveAppState();
+  showCamToast("↪️ Ação refeita (Redo)");
+}
+
+/**
+ * Trata eventos de teclas de atalho globais (Ctrl+Z para Undo, Ctrl+Y para Redo, Delete para remover objectos)
  */
 function handleKeyDown(e) {
-  // Impedir eliminação se o utilizador estiver focado em caixas de input
+  // Impedir atalhos se o utilizador estiver focado em caixas de input
   const activeEl = document.activeElement;
   if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'SELECT' || activeEl.tagName === 'TEXTAREA')) {
+    return;
+  }
+
+  const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+
+  // Atalho UNDO: Ctrl+Z / Cmd+Z
+  if (isCtrlOrCmd && (e.key === 'z' || e.key === 'Z')) {
+    e.preventDefault();
+    if (e.shiftKey) {
+      redoCanvas();
+    } else {
+      undoCanvas();
+    }
+    return;
+  }
+
+  // Atalho REDO: Ctrl+Y / Cmd+Y
+  if (isCtrlOrCmd && (e.key === 'y' || e.key === 'Y')) {
+    e.preventDefault();
+    redoCanvas();
     return;
   }
 
@@ -2606,8 +2909,11 @@ function clearCanvas() {
     canvas.clear();
     canvas.setBackgroundColor('#10141e', canvas.renderAll.bind(canvas));
     clearVisualToolpaths();
+    renderOriginMarker();
     saveAppState();
+    recordHistoryState(true);
     resetClearButton();
+    showCamToast("🗑️ Mesa limpa! Podes premir Ctrl+Z para desfazer.");
   }
 }
 
@@ -5786,6 +6092,7 @@ function setRightClickedObjectStrategy(strategyVal) {
   }
   canvas.requestRenderAll();
   saveAppState();
+  recordHistoryState();
   clearVisualToolpaths();
   showCamToast(`🎨 Contorno definido como: ${getStrategyLabel(strategyVal)}`);
 }
@@ -5872,6 +6179,16 @@ function showContextMenu(e, obj) {
 
   // "Separar Contornos / Cavidades" — visível quando for um Path com múltiplos subcaminhos
   if (ctxSplitSubpaths) ctxSplitSubpaths.style.display = hasSubpaths ? 'block' : 'none';
+
+  // "Desfazer" e "Refazer"
+  if (ctxUndo) {
+    ctxUndo.style.opacity = (undoStack.length > 1) ? '1' : '0.4';
+    ctxUndo.style.pointerEvents = (undoStack.length > 1) ? 'auto' : 'none';
+  }
+  if (ctxRedo) {
+    ctxRedo.style.opacity = (redoStack.length > 0) ? '1' : '0.4';
+    ctxRedo.style.pointerEvents = (redoStack.length > 0) ? 'auto' : 'none';
+  }
 
   // Mostrar opções de estratégia apenas se for uma forma real
   const isRealShape = obj && !obj.isOriginMarker && !obj.isVisualPath;

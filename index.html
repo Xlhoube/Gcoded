@@ -64,6 +64,14 @@
           title="Desagrupar contornos ou separar cavidades do desenho selecionado (DXF/SVG)" disabled>
           🧩 Desagrupar
         </button>
+        <button id="btn-undo" class="action-btn disabled"
+          title="Desfazer última alteração (Ctrl+Z)" disabled>
+          ↩️ Desfazer
+        </button>
+        <button id="btn-redo" class="action-btn disabled"
+          title="Refazer alteração desfeita (Ctrl+Y ou Ctrl+Shift+Z)" disabled>
+          ↪️ Refazer
+        </button>
         <input type="file" id="file-import-3d" accept=".png,.jpg,.jpeg,.webp" style="display: none;">
         <button id="btn-import-3d" class="action-btn relief-btn"
           title="Importar fotografia para Corte 3D por Relevo (Grayscale Relief Carving)">
@@ -889,6 +897,8 @@
   <!-- Menu de Contexto Personalizado (Clique Direito no Objeto) -->
   <div id="context-menu" class="context-menu" style="display: none; position: fixed; z-index: 9999;">
     <ul>
+      <li id="ctx-undo">↩️ Desfazer (Ctrl+Z)</li>
+      <li id="ctx-redo">↪️ Refazer (Ctrl+Y)</li>
       <li id="ctx-send-to-origin">📍 Enviar para Origem da Mesa</li>
       <li id="ctx-strategy-pocket">🟩 Atribuir: Desbaste Interior (Pocket)</li>
       <li id="ctx-strategy-chamfer">🟪 Atribuir: Chanfro nas Arestas (Bisel)</li>
