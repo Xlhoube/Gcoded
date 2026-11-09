@@ -2628,7 +2628,7 @@ function restoreCanvasFromSnapshot(jsonStr) {
 
       // 3. Restaurar objetos de relevo 3D se existirem
       if (reliefsData.length === 0) {
-        renderOriginMarker();
+        drawOriginMarker();
         canvas.requestRenderAll();
         resolve();
       } else {
@@ -2637,7 +2637,7 @@ function restoreCanvasFromSnapshot(jsonStr) {
           if (!meta.reliefSrc) {
             loadedCount++;
             if (loadedCount === reliefsData.length) {
-              renderOriginMarker();
+              drawOriginMarker();
               canvas.requestRenderAll();
               resolve();
             }
@@ -2666,7 +2666,7 @@ function restoreCanvasFromSnapshot(jsonStr) {
             canvas.add(fabricImg);
             loadedCount++;
             if (loadedCount === reliefsData.length) {
-              renderOriginMarker();
+              drawOriginMarker();
               canvas.requestRenderAll();
               resolve();
             }
@@ -2886,45 +2886,36 @@ function deleteSelectedObject() {
   }
 }
 
-let clearConfirmActive = false;
-let clearTimer = null;
-
 /**
- * Limpa todo o canvas de desenho com confirmação de clique duplo premium (sem pop-up nativo)
+ * Limpa todo o canvas de desenho mantendo a grelha e a mira de origem (com suporte total a Undo Ctrl+Z)
  */
 function clearCanvas() {
-  if (!clearConfirmActive) {
-    clearConfirmActive = true;
-    btnClear.innerHTML = "⚠️ Tens a certeza?";
-    btnClear.style.background = "var(--danger)";
-    btnClear.style.color = "#fff";
-    
-    // Repor o botão após 3 segundos se não for clicado novamente
-    clearTimer = setTimeout(() => {
-      resetClearButton();
-    }, 3000);
-  } else {
-    // Segundo clique: Limpar efetivamente
-    clearTimeout(clearTimer);
-    canvas.clear();
-    canvas.setBackgroundColor('#10141e', canvas.renderAll.bind(canvas));
-    clearVisualToolpaths();
-    renderOriginMarker();
-    saveAppState();
-    recordHistoryState(true);
-    resetClearButton();
-    showCamToast("🗑️ Mesa limpa! Podes premir Ctrl+Z para desfazer.");
-  }
-}
+  if (!canvas) return;
 
-/**
- * Repõe o texto e estilo original do botão de Limpar Tudo
- */
-function resetClearButton() {
-  clearConfirmActive = false;
-  btnClear.innerHTML = "🗑️ Limpar Tudo";
-  btnClear.style.background = ""; // Repor estilo CSS padrão
-  btnClear.style.color = "";
+  const userObjects = canvas.getObjects().filter(obj => !obj.isOriginMarker && !obj.isVisualPath);
+  if (userObjects.length === 0) {
+    showCamToast("ℹ️ A mesa já se encontra limpa.");
+    return;
+  }
+
+  // 1. Descartar qualquer seleção ativa
+  canvas.discardActiveObject();
+
+  // 2. Remover todos os contornos e imagens do utilizador
+  const toRemove = canvas.getObjects().filter(obj => !obj.isOriginMarker);
+  toRemove.forEach(obj => canvas.remove(obj));
+
+  // 3. Limpar trajetórias de simulação e redesenhar a mira da origem
+  clearVisualToolpaths();
+  drawOriginMarker();
+  canvas.requestRenderAll();
+
+  // 4. Persistir estado, atualizar botões e registar histórico para permitir Ctrl+Z
+  saveAppState();
+  recordHistoryState(true);
+  updateSelectionState();
+
+  showCamToast("🗑️ Mesa limpa com sucesso! Clica em ↩️ Desfazer (Ctrl+Z) se quiseres recuperar.");
 }
 
 

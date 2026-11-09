@@ -1,9 +1,10 @@
 {
-  "version": "0.10.4",
+  "version": "0.10.5",
   "name": "Gcoded CAM",
-  "build": "20261109-04",
-  "updatedAt": "2026-11-09T07:10:00Z",
+  "build": "20261109-05",
+  "updatedAt": "2026-11-09T07:15:00Z",
   "highlights": [
+    "🗑️ Botão Limpar Tudo Corrigido: Limpeza instantânea, segura e compatível com Desfazer (Ctrl+Z)",
     "↩️ Histórico Undo / Redo: Atalho global Ctrl+Z para Desfazer e Ctrl+Y / Ctrl+Shift+Z para Refazer (até 50 passos)",
     "🔘 Botões Dedicados de Desfazer e Refazer na barra de ferramentas superior e no menu de contexto",
     "🧩 Desagrupar Contornos: Separação de percursos DXF/SVG para edição e atribuição individual de estratégias",
