@@ -5449,18 +5449,250 @@ function setupPWAInstall() {
 }
 
 /**
- * Regista o Service Worker para persistência de ficheiros e funcionamento offline
+ * Gestão de Atualizações PWA (Update Popup & Service Worker Lifecycle)
+ */
+let waitingServiceWorker = null;
+let updatePopupEl = null;
+let updateModalEl = null;
+let btnVersionBadgeEl = null;
+
+/**
+ * Exibe o Popup Flutuante de Atualização Disponível
+ */
+function showUpdatePopup(versionStr = 'v0.10.1') {
+  if (!updatePopupEl) updatePopupEl = document.getElementById('update-popup');
+  if (btnVersionBadgeEl) btnVersionBadgeEl.classList.add('update-ready');
+  
+  const versionLabel = document.getElementById('update-version-label');
+  if (versionLabel) versionLabel.textContent = versionStr;
+
+  if (updatePopupEl) {
+    updatePopupEl.style.display = 'block';
+    requestAnimationFrame(() => {
+      updatePopupEl.classList.add('show');
+    });
+  }
+}
+
+/**
+ * Oculta o Popup Flutuante de Atualização
+ */
+function hideUpdatePopup() {
+  if (!updatePopupEl) updatePopupEl = document.getElementById('update-popup');
+  if (updatePopupEl) {
+    updatePopupEl.classList.remove('show');
+    setTimeout(() => {
+      updatePopupEl.style.display = 'none';
+    }, 320);
+  }
+}
+
+/**
+ * Abre o Modal de Novidades e Changelog
+ */
+function openUpdateModal() {
+  if (!updateModalEl) updateModalEl = document.getElementById('update-modal');
+  if (updateModalEl) {
+    updateModalEl.style.display = 'flex';
+  }
+}
+
+/**
+ * Fecha o Modal de Novidades
+ */
+function closeUpdateModal() {
+  if (!updateModalEl) updateModalEl = document.getElementById('update-modal');
+  if (updateModalEl) {
+    updateModalEl.style.display = 'none';
+  }
+}
+
+/**
+ * Aplica a atualização PWA: envia skipWaiting e recarrega
+ */
+function applyPWAUpdate() {
+  const btnNow = document.getElementById('btn-update-now');
+  const btnModal = document.getElementById('btn-modal-update-now');
+  if (btnNow) {
+    btnNow.innerHTML = '<span>⏳ A atualizar...</span>';
+    btnNow.disabled = true;
+  }
+  if (btnModal) {
+    btnModal.innerHTML = '<span>⏳ A atualizar...</span>';
+    btnModal.disabled = true;
+  }
+
+  if (waitingServiceWorker) {
+    waitingServiceWorker.postMessage({ action: 'skipWaiting' });
+  } else if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistration().then((reg) => {
+      if (reg && reg.waiting) {
+        reg.waiting.postMessage({ action: 'skipWaiting' });
+      } else {
+        window.location.reload();
+      }
+    }).catch(() => window.location.reload());
+  } else {
+    window.location.reload();
+  }
+
+  // Fallback de recarregamento forçado se controllerchange demorar mais de 1.2s
+  setTimeout(() => {
+    window.location.reload();
+  }, 1200);
+}
+
+/**
+ * Configura o ciclo de vida do Service Worker e a deteção de novas versões (PWA Update)
  */
 function registerServiceWorker() {
+  updatePopupEl = document.getElementById('update-popup');
+  updateModalEl = document.getElementById('update-modal');
+  btnVersionBadgeEl = document.getElementById('btn-version-badge');
+
+  const btnUpdateNow = document.getElementById('btn-update-now');
+  const btnUpdateDetails = document.getElementById('btn-update-details');
+  const btnCloseUpdatePopup = document.getElementById('btn-close-update-popup');
+  const btnCloseUpdateModal = document.getElementById('btn-close-update-modal');
+  const btnCloseUpdateModalFooter = document.getElementById('btn-close-update-modal-footer');
+  const btnModalUpdateNow = document.getElementById('btn-modal-update-now');
+  const btnCheckUpdateModal = document.getElementById('btn-check-update-modal');
+
+  // Eventos de clique do Popup
+  if (btnUpdateNow) btnUpdateNow.addEventListener('click', applyPWAUpdate);
+  if (btnModalUpdateNow) btnModalUpdateNow.addEventListener('click', applyPWAUpdate);
+  if (btnCloseUpdatePopup) btnCloseUpdatePopup.addEventListener('click', hideUpdatePopup);
+
+  if (btnUpdateDetails) {
+    btnUpdateDetails.addEventListener('click', () => {
+      hideUpdatePopup();
+      openUpdateModal();
+    });
+  }
+
+  // Eventos do Modal de Novidades
+  if (btnCloseUpdateModal) btnCloseUpdateModal.addEventListener('click', closeUpdateModal);
+  if (btnCloseUpdateModalFooter) btnCloseUpdateModalFooter.addEventListener('click', closeUpdateModal);
+  if (updateModalEl) {
+    updateModalEl.addEventListener('click', (e) => {
+      if (e.target === updateModalEl) closeUpdateModal();
+    });
+  }
+
+  // Botão de versão na barra superior (Top Bar)
+  if (btnVersionBadgeEl) {
+    btnVersionBadgeEl.addEventListener('click', () => {
+      if (waitingServiceWorker) {
+        showUpdatePopup();
+      } else {
+        openUpdateModal();
+      }
+    });
+  }
+
+  // Botão de verificação manual no modal
+  if (btnCheckUpdateModal) {
+    btnCheckUpdateModal.addEventListener('click', () => {
+      if (!('serviceWorker' in navigator)) {
+        showCamToast('ℹ️ O teu navegador não suporta Service Workers.');
+        return;
+      }
+      btnCheckUpdateModal.innerHTML = '🔍 A verificar...';
+      btnCheckUpdateModal.disabled = true;
+
+      navigator.serviceWorker.getRegistration().then((reg) => {
+        if (!reg) {
+          btnCheckUpdateModal.innerHTML = '🔍 Verificar Atualizações';
+          btnCheckUpdateModal.disabled = false;
+          showCamToast('ℹ️ Service Worker não registado nesta sessão.');
+          return;
+        }
+
+        if (reg.waiting) {
+          waitingServiceWorker = reg.waiting;
+          closeUpdateModal();
+          showUpdatePopup();
+          return;
+        }
+
+        reg.update().then(() => {
+          setTimeout(() => {
+            btnCheckUpdateModal.innerHTML = '🔍 Verificar Atualizações';
+            btnCheckUpdateModal.disabled = false;
+            if (reg.waiting) {
+              waitingServiceWorker = reg.waiting;
+              closeUpdateModal();
+              showUpdatePopup();
+            } else {
+              showCamToast('✅ Estás a usar a versão mais recente do Gcoded (v0.10.1)!');
+            }
+          }, 600);
+        }).catch((err) => {
+          btnCheckUpdateModal.innerHTML = '🔍 Verificar Atualizações';
+          btnCheckUpdateModal.disabled = false;
+          console.warn('[Gcoded SW] Erro ao verificar atualização:', err);
+          showCamToast('✅ Estás a usar a versão mais recente do Gcoded (v0.10.1)!');
+        });
+      });
+    });
+  }
+
+  // Fechar modal com Escape
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && updateModalEl && updateModalEl.style.display === 'flex') {
+      closeUpdateModal();
+    }
+  });
+
+  // Expor globalmente para testes ou controlo direto
+  window.showUpdatePopup = showUpdatePopup;
+  window.openUpdateModal = openUpdateModal;
+
+  // Registo do Service Worker
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js')
         .then((reg) => {
           console.log('[Gcoded SW] Service Worker registado com âmbito:', reg.scope);
+
+          // 1. Se já existe um worker em espera (update instalado previamente)
+          if (reg.waiting) {
+            waitingServiceWorker = reg.waiting;
+            showUpdatePopup();
+          }
+
+          // 2. Quando um novo worker é descarregado
+          reg.addEventListener('updatefound', () => {
+            const installing = reg.installing;
+            if (!installing) return;
+
+            installing.addEventListener('statechange', () => {
+              if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+                // Nova versão instalada enquanto a anterior controla a página
+                waitingServiceWorker = installing;
+                showUpdatePopup();
+                showCamToast('🚀 Nova atualização do Gcoded pronta a instalar!');
+              }
+            });
+          });
+
+          // 3. Verificar atualizações ao recuperar foco na janela
+          window.addEventListener('focus', () => {
+            reg.update().catch(() => {});
+          });
         })
         .catch((err) => {
           console.warn('[Gcoded SW] Registo de Service Worker falhou:', err);
         });
+
+      // 4. Quando o novo worker assume o controlo, recarregar para carregar os novos assets
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
+      });
     });
   }
 }

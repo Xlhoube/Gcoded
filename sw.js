@@ -24,7 +24,15 @@ self.addEventListener('install', (event) => {
       });
     })
   );
-  self.skipWaiting();
+  // Não forçar skipWaiting() aqui para permitir que o navegador notifique a página
+  // e exiba o popup de atualização amigável antes de recarregar.
+});
+
+// Permite que a página envie a mensagem para ativar a nova versão
+self.addEventListener('message', (event) => {
+  if (event.data && (event.data.action === 'skipWaiting' || event.data.type === 'SKIP_WAITING')) {
+    self.skipWaiting();
+  }
 });
 
 // Ativação: remove caches antigos

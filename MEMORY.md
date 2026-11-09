@@ -156,6 +156,15 @@
     5. Mantido fallback geométrico seguro com limite rigoroso de miter (1.414).
     6. Incremento de versão para `v0.10.1`.
 
+- **[2026-11-09] | DECISÃO-027 | Sistema de Notificação e Popup de Atualização PWA (Auto-Update & Manual Check)**
+  - **Contexto:** O utilizador solicitou um popup de atualização para a aplicação PWA.
+  - **Decisão:**
+    1. Criado popup flutuante de atualização (`#update-popup`) com design glassmorphism, ícone animado de foguete, botão de ação imediata "⚡ Atualizar Agora" e fecho/adiamento.
+    2. Adicionado botão de versão e estado (`#btn-version-badge`) no cabeçalho superior (`#top-bar`) com pulso luminoso que sinaliza quando uma nova versão foi descarregada pelo Service Worker.
+    3. Criado modal de histórico e novidades (`#update-modal`) com lista de changelog das versões recentes e botão de verificação manual com feedback interativo.
+    4. Atualizado o ciclo de vida do Service Worker (`sw.js`): removido o `skipWaiting` imediato no evento `install`, aguardando a instrução do utilizador via `postMessage({ action: 'skipWaiting' })`, com reload automático em `controllerchange`.
+    5. Exposta a função `window.showUpdatePopup()` no âmbito global para pré-visualização e testes rápidos.
+
 ---
 
 ## 🔧 Estado do Projecto (Open Issues & TODO)
@@ -188,5 +197,6 @@
 - [x] Integração de REA (Reverse Engineer Anything - morluto/rea) via Skill e Servidor MCP Alinhado
 - [x] Engenharia Reversa CAM (FreeCAD / Carbide / VCarve): Alívio de Cantos (Dogbone/T-Bone) e Entrada em Rampa (v0.10.0)
 - [x] Desfasamento Poligonal Industrial ClipperLib (Eliminação Total de Laços/Swallowtails) (v0.10.1)
+- [x] Popup e Notificação de Atualização PWA com Changelog e Verificação Manual (DECISÃO-027)
 
 

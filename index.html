@@ -69,7 +69,12 @@
 
       <div class="spacer"></div>
 
-      <div class="install-group">
+      <div class="install-group" style="display: flex; gap: 0.45rem; align-items: center;">
+        <button id="btn-version-badge" class="action-btn version-badge-btn"
+          title="Gcoded CAM v0.10.1 - Clica para verificar atualizações ou ver novidades">
+          <span id="version-pulse-dot" class="version-dot"></span>
+          <span id="version-badge-text">v0.10.1</span>
+        </button>
         <button id="btn-install-app" class="action-btn install-btn"
           title="Instalar Gcoded no computador ou telemóvel para acesso rápido e 100% offline">
           <span class="icon">📲</span> <span class="install-text">Instalar App</span>
@@ -854,6 +859,106 @@
     <span id="cam-toast-icon" style="font-size: 1.3rem;">✨</span>
     <span id="cam-toast-msg" style="font-size: 0.9rem;">Trajectória gerada com sucesso!</span>
     <button id="cam-toast-action" class="cam-toast-btn">👁️ Abrir Simulador 3D</button>
+  </div>
+
+  <!-- POPUP / BANNER FLUTUANTE DE ATUALIZAÇÃO DISPONÍVEL (PWA) -->
+  <aside id="update-popup" class="update-popup" aria-live="polite" style="display: none;">
+    <div class="update-popup-card">
+      <div class="update-popup-header">
+        <div class="update-icon-wrapper">
+          <span class="update-icon">🚀</span>
+          <span class="update-pulse-ring"></span>
+        </div>
+        <div class="update-header-info">
+          <div class="update-tag-row">
+            <span class="update-badge">NOVA VERSÃO</span>
+            <span id="update-version-label" class="update-version-text">v0.10.1</span>
+          </div>
+          <h4 class="update-title">Atualização Disponível!</h4>
+        </div>
+        <button id="btn-close-update-popup" class="update-close-btn" title="Lembrar mais tarde">✕</button>
+      </div>
+      <p class="update-desc">
+        Foi descarregada uma nova versão do Gcoded com melhorias de cálculo e correções. Atualiza para carregar as novidades.
+      </p>
+      <div class="update-actions">
+        <button id="btn-update-now" class="update-cta-btn">
+          <span>⚡ Atualizar Agora</span>
+        </button>
+        <button id="btn-update-details" class="update-link-btn">
+          Ver Novidades
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MODAL DE NOVIDADES E HISTÓRICO DE ATUALIZAÇÕES -->
+  <div id="update-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content update-modal-content">
+      <div class="modal-header">
+        <h2>🚀 Atualizações do Gcoded CAM</h2>
+        <button id="btn-close-update-modal" class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="update-hero-card">
+          <div class="update-hero-icon">✨</div>
+          <div style="flex: 1;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.2rem;">
+              <h3 style="margin: 0; color: #ffffff; font-size: 1.1rem;">Gcoded CAM Offline</h3>
+              <span class="update-badge" style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.4); color: #34d399;">v0.10.1</span>
+            </div>
+            <p style="margin: 0; font-size: 0.82rem; color: #94a3b8; line-height: 1.4;">
+              A tua aplicação atualiza-se de forma autónoma através do Service Worker, preservando os teus desenhos e definições locais.
+            </p>
+          </div>
+        </div>
+
+        <h3 style="font-size: 0.95rem; margin: 1rem 0 0.6rem 0; color: #e2e8f0;">Histórico Recente de Versões</h3>
+        <div class="update-changelog-list">
+          <div class="changelog-item">
+            <div class="changelog-header">
+              <span class="changelog-ver">v0.10.1</span>
+              <span class="changelog-tag" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">Atual</span>
+            </div>
+            <div class="changelog-title">🛡️ Desfasamento Poligonal Industrial ClipperLib</div>
+            <div class="changelog-body">
+              Integração local do motor ClipperLib (algoritmo Vatti): elimina 100% dos laços parasitas em cauda de andorinha (<em>swallowtails</em>) e cusps cruzados em curvas complexas ou estreitas.
+            </div>
+          </div>
+
+          <div class="changelog-item">
+            <div class="changelog-header">
+              <span class="changelog-ver">v0.10.0</span>
+            </div>
+            <div class="changelog-title">🦴 Alívio de Cantos (Dogbone/T-Bone) e Entrada em Rampa</div>
+            <div class="changelog-body">
+              Engenharia reversa dos módulos CAM do FreeCAD e Carbide Create Pro: corte de alívios para encaixe de respigas a 90° e descida helicoidal em 3 eixos simultâneos (XYZ) sem esforço de mergulho vertical.
+            </div>
+          </div>
+
+          <div class="changelog-item">
+            <div class="changelog-header">
+              <span class="changelog-ver">v0.9.0</span>
+            </div>
+            <div class="changelog-title">📲 Instalação PWA & Suporte 100% Offline</div>
+            <div class="changelog-body">
+              Suporte completo de instalação em Windows, macOS, Linux, ChromeOS e smartphones com Service Worker e cache stale-while-revalidate.
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+        <button id="btn-check-update-modal" class="secondary-btn" title="Procurar nova versão no servidor">
+          🔍 Verificar Atualizações
+        </button>
+        <div style="display: flex; gap: 0.5rem;">
+          <button id="btn-close-update-modal-footer" class="secondary-btn">Fechar</button>
+          <button id="btn-modal-update-now" class="primary-btn" style="background: linear-gradient(135deg, #10b981, #059669); border: none;">
+            ⚡ Atualizar e Recarregar
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="./src/app.js?v=0.10.1"></script>
