@@ -136,6 +136,17 @@
     1. Instalada e registada a skill oficial `reverse-engineer-anything` (v49 compatível com `rea-agents@6.8.0`, com todas as referências de engenharia reversa).
     2. Configurado o servidor MCP para Antigravity em `~/.gemini/config/mcp_config.json` apontando para o runtime direto do Node.js, validado com estado `aligned` no `rea doctor`.
     3. Disponibilizado o pacote `rea-agents` e a CLI `rea` com 175 comandos e 229 ferramentas de análise reversa.
+- **[2026-11-09] | DECISÃO-025 | Engenharia Reversa (REA) de CAM: Alívio de Cantos (Dogbone) e Entrada em Rampa (Ramping)**
+  - **Contexto:** Com base nas referências de software CAM profissional (FreeCAD CAM Workbench, Carbide Create Pro, Vectric VCarve e EasyCarve), foi realizada engenharia reversa dos dois algoritmos de maquinação CNC mais cruciais para marcenaria e peças de precisão:
+    1. **Alívio de Cantos Interiores (Dogbone / T-Bone):** Baseado no módulo `DogboneII.py` do FreeCAD e VCarve. Resolve o problema do raio cego da fresa cilíndrica em cantos de 90°, permitindo o encaixe perfeito de respigas, tábuas e ensambladuras retangulares.
+       - *Matemática:* Deteção de deflexão angular $\Delta = t_1 - t_0$ para cantos côncavos. Cálculo do vetor de alívio por bissetriz ($\vec{u}_1 - \vec{u}_2$) para *Dogbone 45°*, ou seleção de aresta dominante para *T-Bone Horizontal* e *T-Bone Vertical* (que escondem a folga dentro da junta montada). Comprimento adaptativo $L = \max(0.45R, \frac{R}{\cos(\Delta/2)} - 0.7R)$.
+    2. **Entrada em Rampa Suave (Ramp Entry):** Baseado no método 4 de `ramp_entry.py` do FreeCAD CAM e Carbide Create Pro. Substitui o mergulho vertical a direito por uma descida helicoidal/inclinada contínua ao longo do perímetro da peça em 3 eixos simultâneos ($XYZ$), com sobreposição (*overlap*) determinística para garantir a limpeza plana do início da passagem à cota final.
+  - **Decisão:**
+    - Adicionadas secções dedicadas e controlos paramétricos no painel lateral (`#param-use-dogbone`, `#param-dogbone-type`, `#param-use-ramping`, `#param-ramp-angle`, `#param-ramp-max-len`).
+    - Implementadas as funções `applyDogboneRelief(points, toolRadius, type, strategy)` e `generateRampedPass(loop, zStart, zTarget, rampAngleDeg, maxRampLen)`.
+    - Integrado o cálculo no motor `generateGCode()` com emissão sincronizada de blocos `G1 X... Y... Z... F...` e visualização 2D/3D em tempo real.
+    - Persistência total dos novos parâmetros no `localStorage` via `saveAppState()` e `loadAppState()`.
+    - Atualização da versão da aplicação e da cache PWA para `v0.10.0`.
 
 ---
 
@@ -167,4 +178,6 @@
 - [x] Repositório GitHub remoto configurado e sincronizado com tracking upstream (main)
 - [x] Opção de Instalar Aplicação (PWA com Manifest, Service Worker, Ícones e Modal de Instalação)
 - [x] Integração de REA (Reverse Engineer Anything - morluto/rea) via Skill e Servidor MCP Alinhado
+- [x] Engenharia Reversa CAM (FreeCAD / Carbide / VCarve): Alívio de Cantos (Dogbone/T-Bone) e Entrada em Rampa (v0.10.0)
+
 

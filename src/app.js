@@ -53,6 +53,8 @@ const DEFAULT_TOOLS = [
 // Parâmetros de Fresa e CNC Router
 let paramToolType, inputSpindleSpeed, lblSpindleSpeed, inputStepover, paramUseArcs;
 let paramUseTabs, tabsSettingsGrid, paramTabCount, paramTabWidth, paramTabHeight;
+let paramUseDogbone, dogboneSettingsGrid, paramDogboneType;
+let paramUseRamping, rampingSettingsGrid, paramRampAngle, paramRampMaxLen;
 
 // Elementos do Gestor de Ferramentas (Modal)
 let toolManagerModal, btnCloseToolManager, btnCloseToolManagerFooter, toolManagerTbody, toolManagerForm, btnMngrClearForm;
@@ -192,6 +194,49 @@ function cacheUIElements() {
   if (paramTabCount) paramTabCount.addEventListener('change', saveAppState);
   if (paramTabWidth) paramTabWidth.addEventListener('change', saveAppState);
   if (paramTabHeight) paramTabHeight.addEventListener('change', saveAppState);
+
+  // Alívio de Cantos / Dogbone Fillets (REA FreeCAD / VCarve)
+  paramUseDogbone = document.getElementById('param-use-dogbone');
+  dogboneSettingsGrid = document.getElementById('dogbone-settings-grid');
+  paramDogboneType = document.getElementById('param-dogbone-type');
+
+  if (paramUseDogbone) {
+    paramUseDogbone.addEventListener('change', () => {
+      const active = paramUseDogbone.checked;
+      if (dogboneSettingsGrid) {
+        dogboneSettingsGrid.style.opacity = active ? '1' : '0.45';
+        dogboneSettingsGrid.style.pointerEvents = active ? 'auto' : 'none';
+      }
+      clearVisualToolpaths();
+      saveAppState();
+    });
+  }
+  if (paramDogboneType) {
+    paramDogboneType.addEventListener('change', () => {
+      clearVisualToolpaths();
+      saveAppState();
+    });
+  }
+
+  // Entrada em Rampa / Ramp Entry (REA Carbide Create & FreeCAD)
+  paramUseRamping = document.getElementById('param-use-ramping');
+  rampingSettingsGrid = document.getElementById('ramping-settings-grid');
+  paramRampAngle = document.getElementById('param-ramp-angle');
+  paramRampMaxLen = document.getElementById('param-ramp-max-len');
+
+  if (paramUseRamping) {
+    paramUseRamping.addEventListener('change', () => {
+      const active = paramUseRamping.checked;
+      if (rampingSettingsGrid) {
+        rampingSettingsGrid.style.opacity = active ? '1' : '0.45';
+        rampingSettingsGrid.style.pointerEvents = active ? 'auto' : 'none';
+      }
+      clearVisualToolpaths();
+      saveAppState();
+    });
+  }
+  if (paramRampAngle) paramRampAngle.addEventListener('change', saveAppState);
+  if (paramRampMaxLen) paramRampMaxLen.addEventListener('change', saveAppState);
 
   inputTableX = document.getElementById('param-table-x');
   inputTableY = document.getElementById('param-table-y');
@@ -3044,6 +3089,196 @@ function generatePocketToolpaths(points, toolDia, stepoverPercent = 40) {
 }
 
 /**
+ * REA FreeCAD DogboneII.py & Vectric VCarve:
+ * Aplica alívios de cantos interiores (Dogbone / T-Bone) aos vértices côncavos de contornos fechados,
+ * permitindo que peças retangulares (encaixes macho-fêmea e ensambladuras) entrem perfeitamente.
+ */
+function applyDogboneRelief(points, toolRadius, type = 'dogbone', strategy = 'inside') {
+  if (!points || points.length < 3 || toolRadius <= 0.05) return points;
+
+  const isClosed = Math.hypot(points[0].x - points[points.length - 1].x,
+                              points[0].y - points[points.length - 1].y) < 0.1;
+  if (!isClosed) return points;
+
+  const loop = points.slice(0, -1);
+  const n = loop.length;
+  if (n < 3) return points;
+
+  const area = signedArea(points);
+  const isCCW = area > 0;
+
+  const newPoints = [];
+
+  for (let i = 0; i < n; i++) {
+    const prev = (i - 1 + n) % n;
+    const curr = i;
+    const next = (i + 1) % n;
+
+    const pPrev = loop[prev];
+    const pCurr = loop[curr];
+    const pNext = loop[next];
+
+    newPoints.push({ x: pCurr.x, y: pCurr.y });
+
+    // Vetores de entrada e saída
+    const v1x = pCurr.x - pPrev.x;
+    const v1y = pCurr.y - pPrev.y;
+    const len1 = Math.hypot(v1x, v1y);
+
+    const v2x = pNext.x - pCurr.x;
+    const v2y = pNext.y - pCurr.y;
+    const len2 = Math.hypot(v2x, v2y);
+
+    if (len1 < 1e-3 || len2 < 1e-3) continue;
+
+    const u1x = v1x / len1;
+    const u1y = v1y / len1;
+    const u2x = v2x / len2;
+    const u2y = v2y / len2;
+
+    const t0 = Math.atan2(u1y, u1x);
+    const t1 = Math.atan2(u2y, u2x);
+    let defl = t1 - t0;
+    while (defl <= -Math.PI) defl += 2 * Math.PI;
+    while (defl > Math.PI) defl -= 2 * Math.PI;
+
+    // Num laço fechado, diferenciar cantos interiores consoante corte exterior ou interior:
+    // Corte Exterior: reentrâncias (defl < 0 em CCW)
+    // Corte Interior/Pocket/On: vértices do contorno interno (defl > 0 em CCW)
+    let isInsideCorner = false;
+    if (strategy === 'outside') {
+      isInsideCorner = isCCW ? (defl < -0.3 && defl > -2.85) : (defl > 0.3 && defl < 2.85);
+    } else {
+      isInsideCorner = isCCW ? (defl > 0.3 && defl < 2.85) : (defl < -0.3 && defl > -2.85);
+    }
+
+    if (isInsideCorner) {
+      const halfDefl = Math.abs(defl) / 2;
+      const cosHalf = Math.cos(halfDefl);
+      if (cosHalf < 0.1) continue;
+
+      const dir1 = [u1x, u1y];
+      const dir2 = [-u2x, -u2y];
+      let boneVec = [0, 0];
+
+      if (type === 'tbone-h') {
+        boneVec = Math.abs(dir1[0]) >= Math.abs(dir2[0]) ? dir1 : dir2;
+      } else if (type === 'tbone-v') {
+        boneVec = Math.abs(dir1[1]) >= Math.abs(dir2[1]) ? dir1 : dir2;
+      } else {
+        const bx = dir1[0] + dir2[0];
+        const by = dir1[1] + dir2[1];
+        const blen = Math.hypot(bx, by) || 1;
+        boneVec = [bx / blen, by / blen];
+      }
+
+      // Profundidade do corte de osso (overshoot adaptativo REA FreeCAD DogboneII)
+      const boneLength = type.startsWith('tbone')
+        ? toolRadius * 1.05
+        : Math.max(toolRadius * 0.45, (toolRadius / Math.max(0.2, cosHalf)) - toolRadius * 0.7);
+
+      const dx = boneLength * boneVec[0];
+      const dy = boneLength * boneVec[1];
+
+      // Inserir os waypoints do alívio: avançar até à ponta e retroceder ao canto
+      newPoints.push({ x: pCurr.x + dx, y: pCurr.y + dy, isDogbone: true });
+      newPoints.push({ x: pCurr.x, y: pCurr.y, isDogboneReturn: true });
+    }
+  }
+
+  newPoints.push({ ...newPoints[0] });
+  return newPoints;
+}
+
+/**
+ * REA FreeCAD ramp_entry.py & Carbide Create Pro:
+ * Gera descida em rampa inclinada contínua ao longo do perímetro inicial da passagem
+ * em vez de mergulho vertical a direito, reduzindo esforços de corte e calor.
+ */
+function generateRampedPass(loop, zStart, zTarget, rampAngleDeg = 10, maxRampLen = 30) {
+  if (!loop || loop.length < 2) return [];
+
+  const deltaZ = Math.abs(zTarget - zStart);
+  if (deltaZ < 0.01) {
+    return loop.map(p => ({ x: p.x, y: p.y, z: zTarget }));
+  }
+
+  const angleRad = (Math.max(2, Math.min(45, rampAngleDeg)) * Math.PI) / 180;
+  const neededRampLen = Math.min(maxRampLen, deltaZ / Math.tan(angleRad));
+
+  const cumDists = [0];
+  let totalPerimeter = 0;
+  for (let i = 0; i < loop.length - 1; i++) {
+    const d = Math.hypot(loop[i + 1].x - loop[i].x, loop[i + 1].y - loop[i].y);
+    totalPerimeter += d;
+    cumDists.push(totalPerimeter);
+  }
+
+  const effectiveRampLen = Math.min(neededRampLen, totalPerimeter * 0.85);
+  const rampedPoints = [];
+
+  rampedPoints.push({ x: loop[0].x, y: loop[0].y, z: zStart });
+  let rampCompleted = false;
+
+  for (let i = 1; i < loop.length; i++) {
+    const p1 = loop[i - 1];
+    const p2 = loop[i];
+    const dStart = cumDists[i - 1];
+    const dEnd = cumDists[i];
+
+    if (!rampCompleted) {
+      if (dEnd <= effectiveRampLen) {
+        const zP2 = zStart + (zTarget - zStart) * (dEnd / effectiveRampLen);
+        rampedPoints.push({ x: p2.x, y: p2.y, z: zP2, isRamping: true });
+        if (Math.abs(dEnd - effectiveRampLen) < 1e-3) {
+          rampCompleted = true;
+        }
+      } else if (dStart < effectiveRampLen && dEnd > effectiveRampLen) {
+        const frac = (effectiveRampLen - dStart) / (dEnd - dStart);
+        const splitX = p1.x + (p2.x - p1.x) * frac;
+        const splitY = p1.y + (p2.y - p1.y) * frac;
+        rampedPoints.push({ x: splitX, y: splitY, z: zTarget, isRampEnd: true });
+        rampedPoints.push({ x: p2.x, y: p2.y, z: zTarget });
+        rampCompleted = true;
+      } else {
+        rampedPoints.push({ x: p2.x, y: p2.y, z: zTarget });
+      }
+    } else {
+      rampedPoints.push({ x: p2.x, y: p2.y, z: zTarget });
+    }
+  }
+
+  // FreeCAD Método 4: Sobreposição (Overlap) para limpar a rampa de entrada à cota zTarget
+  if (effectiveRampLen > 0.1) {
+    const overlapPoints = [];
+    for (let i = 1; i < loop.length; i++) {
+      const dStart = cumDists[i - 1];
+      const dEnd = cumDists[i];
+      if (dEnd <= effectiveRampLen) {
+        overlapPoints.push({ x: loop[i].x, y: loop[i].y, z: zTarget, isOverlap: true });
+        if (Math.abs(dEnd - effectiveRampLen) < 1e-3) break;
+      } else if (dStart < effectiveRampLen && dEnd > effectiveRampLen) {
+        const frac = (effectiveRampLen - dStart) / (dEnd - dStart);
+        const splitX = loop[i - 1].x + (loop[i].x - loop[i - 1].x) * frac;
+        const splitY = loop[i - 1].y + (loop[i].y - loop[i - 1].y) * frac;
+        overlapPoints.push({ x: splitX, y: splitY, z: zTarget, isOverlap: true });
+        break;
+      } else {
+        break;
+      }
+    }
+    overlapPoints.forEach(p => rampedPoints.push(p));
+    // Regressar ao ponto inicial (p0) ao nível zTarget pelo percurso já desbastado
+    for (let i = overlapPoints.length - 2; i >= 0; i--) {
+      rampedPoints.push({ x: overlapPoints[i].x, y: overlapPoints[i].y, z: zTarget });
+    }
+    rampedPoints.push({ x: loop[0].x, y: loop[0].y, z: zTarget });
+  }
+
+  return rampedPoints;
+}
+
+/**
  * Calcula e interpola os waypoints de subida e descida para Abas de Fixação (Holding Tabs)
  * Baseado no modelo determinístico de pontes do Layerling (stencilBridges.ts)
  */
@@ -3602,6 +3837,14 @@ function generateGCode() {
           if (loopsToCut.length === 0) loopsToCut = [mmPoints];
         }
 
+        // REA FreeCAD DogboneII & Vectric VCarve:
+        // Se ativado pelo utilizador, aplicar alívios de cantos nos cantos internos
+        const useDogbone = paramUseDogbone && paramUseDogbone.checked;
+        const dogboneType = paramDogboneType ? paramDogboneType.value : 'dogbone';
+        if (useDogbone && isClosed) {
+          loopsToCut = loopsToCut.map(l => applyDogboneRelief(l, toolRadius, dogboneType, strategy));
+        }
+
         // Visualização 2D no Canvas com os percursos compensados reais
         loopsToCut.forEach(loop => {
           const vis = loop.map(p => ({
@@ -3620,6 +3863,10 @@ function generateGCode() {
         }
         zPasses.push(depthTotal);
 
+        const useRamping = paramUseRamping && paramUseRamping.checked;
+        const rampAngle = paramRampAngle ? parseFloat(paramRampAngle.value) || 10 : 10;
+        const rampMaxLen = paramRampMaxLen ? parseFloat(paramRampMaxLen.value) || 30 : 30;
+
         // Executar corte para cada laço gerado
         loopsToCut.forEach((loop) => {
           if (!loop || loop.length < 2) return;
@@ -3629,6 +3876,8 @@ function generateGCode() {
           gcode.push(`G0 X${startPt.x.toFixed(3)} Y${startPt.y.toFixed(3)}`);
 
           zPasses.forEach((zVal, pIdx) => {
+            const prevZ = (pIdx === 0) ? 0 : zPasses[pIdx - 1];
+
             if (!isClosed && pIdx > 0) {
               gcode.push(`G0 Z${safeZ.toFixed(3)}`);
               gcode.push(`G0 X${startPt.x.toFixed(3)} Y${startPt.y.toFixed(3)}`);
@@ -3637,14 +3886,20 @@ function generateGCode() {
             const isBottomPass = (zVal <= depthTotal + tabHeight);
             // Aplicar Holding Tabs apenas no contorno exterior ou sobre a linha
             const shouldApplyTabs = useTabs && isClosed && isBottomPass && (strategy === 'outside' || strategy === 'on');
-            const waypoints = shouldApplyTabs
-              ? generateContourWithTabs(loop, { enabled: true, count: tabCount, width: tabWidth, height: tabHeight }, zVal, depthTotal)
-              : loop.map(p => ({ x: p.x, y: p.y, z: zVal }));
+            
+            let waypoints;
+            if (shouldApplyTabs) {
+              waypoints = generateContourWithTabs(loop, { enabled: true, count: tabCount, width: tabWidth, height: tabHeight }, zVal, depthTotal);
+            } else if (useRamping && isClosed) {
+              waypoints = generateRampedPass(loop, prevZ, zVal, rampAngle, rampMaxLen);
+            } else {
+              waypoints = loop.map(p => ({ x: p.x, y: p.y, z: zVal }));
+            }
 
-            // Mergulho vertical à taxa de avanço Z
+            // Posicionar no início Z da passagem
             gcode.push(`G1 Z${waypoints[0].z.toFixed(3)} F${feedZ.toFixed(0)}`);
 
-            // Corte em avanço XY
+            // Corte em avanço XY / XYZ
             for (let i = 1; i < waypoints.length; i++) {
               const prev = waypoints[i - 1];
               const curr = waypoints[i];
@@ -3653,10 +3908,15 @@ function generateGCode() {
                 if (curr.z > prev.z) {
                   gcode.push(`G1 Z${curr.z.toFixed(3)} F${feedZ.toFixed(0)} (Subida Aba)`);
                   gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)}`);
-                } else {
+                } else if (shouldApplyTabs) {
                   gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)}`);
                   gcode.push(`G1 Z${curr.z.toFixed(3)} F${feedZ.toFixed(0)} (Descida Corte)`);
+                } else {
+                  // Rampa 3D inclinada contínua (movimento simultâneo XYZ)
+                  gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} Z${curr.z.toFixed(3)} F${feedXY.toFixed(0)} (Entrada em Rampa)`);
                 }
+              } else if (curr.isDogbone) {
+                gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)} (Alivio Dogbone)`);
               } else {
                 gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)}`);
               }
@@ -4739,6 +4999,11 @@ async function saveAppState() {
       tabCount: paramTabCount ? parseInt(paramTabCount.value, 10) : 4,
       tabWidth: paramTabWidth ? parseFloat(paramTabWidth.value) : 5.0,
       tabHeight: paramTabHeight ? parseFloat(paramTabHeight.value) : 1.5,
+      useDogbone: paramUseDogbone ? paramUseDogbone.checked : false,
+      dogboneType: paramDogboneType ? paramDogboneType.value : 'dogbone',
+      useRamping: paramUseRamping ? paramUseRamping.checked : false,
+      rampAngle: paramRampAngle ? parseFloat(paramRampAngle.value) || 10 : 10,
+      rampMaxLen: paramRampMaxLen ? parseFloat(paramRampMaxLen.value) || 30 : 30,
       tableX: parseFloat(inputTableX.value),
       tableY: parseFloat(inputTableY.value),
       materialZ: parseFloat(inputMaterialZ.value),
@@ -4798,6 +5063,23 @@ async function loadAppState() {
       if (p.tabCount !== undefined && paramTabCount) paramTabCount.value = p.tabCount;
       if (p.tabWidth !== undefined && paramTabWidth) paramTabWidth.value = p.tabWidth;
       if (p.tabHeight !== undefined && paramTabHeight) paramTabHeight.value = p.tabHeight;
+      if (p.useDogbone !== undefined && paramUseDogbone) {
+        paramUseDogbone.checked = p.useDogbone;
+        if (dogboneSettingsGrid) {
+          dogboneSettingsGrid.style.opacity = p.useDogbone ? '1' : '0.45';
+          dogboneSettingsGrid.style.pointerEvents = p.useDogbone ? 'auto' : 'none';
+        }
+      }
+      if (p.dogboneType && paramDogboneType) paramDogboneType.value = p.dogboneType;
+      if (p.useRamping !== undefined && paramUseRamping) {
+        paramUseRamping.checked = p.useRamping;
+        if (rampingSettingsGrid) {
+          rampingSettingsGrid.style.opacity = p.useRamping ? '1' : '0.45';
+          rampingSettingsGrid.style.pointerEvents = p.useRamping ? 'auto' : 'none';
+        }
+      }
+      if (p.rampAngle !== undefined && paramRampAngle) paramRampAngle.value = p.rampAngle;
+      if (p.rampMaxLen !== undefined && paramRampMaxLen) paramRampMaxLen.value = p.rampMaxLen;
       if (p.spindleSpeed !== undefined && inputSpindleSpeed) inputSpindleSpeed.value = p.spindleSpeed;
       
       if (p.activeToolId && selectToolLibrary) {

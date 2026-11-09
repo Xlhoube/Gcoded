@@ -328,6 +328,60 @@
           </div>
         </div>
 
+        <!-- Alívio de Cantos / Dogbone Fillets (REA FreeCAD & VCarve) -->
+        <div class="panel-section">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+            <h2 style="margin: 0; font-size: 0.95rem;">Alívio de Cantos (Dogbone)</h2>
+            <div class="checkbox-field" style="display: flex; align-items: center; gap: 0.4rem;">
+              <input type="checkbox" id="param-use-dogbone"
+                style="accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;">
+              <label for="param-use-dogbone"
+                style="font-size: 0.8rem; cursor: pointer; color: #38bdf8; font-weight: 600;">Ativar</label>
+            </div>
+          </div>
+          <p style="font-size: 0.75rem; color: #94a3b8; margin: 0 0 0.6rem 0;">
+            Corta alívios nos cantos internos de 90° para que peças retangulares encaixem sem raio cego.
+          </p>
+          <div id="dogbone-settings-grid" class="input-grid"
+            style="opacity: 0.45; pointer-events: none; transition: opacity 0.2s ease;">
+            <div class="input-field" style="grid-column: span 2;">
+              <label for="param-dogbone-type">Estratégia de Alívio</label>
+              <select id="param-dogbone-type">
+                <option value="dogbone" selected>🦴 Dogbone (Bissetriz 45°)</option>
+                <option value="tbone-h">🪵 T-Bone Horizontal (Aresta X)</option>
+                <option value="tbone-v">🪵 T-Bone Vertical (Aresta Y)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Entrada em Rampa / Ramp Entry (REA Carbide Create & FreeCAD) -->
+        <div class="panel-section">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+            <h2 style="margin: 0; font-size: 0.95rem;">Entrada em Rampa (Ramping)</h2>
+            <div class="checkbox-field" style="display: flex; align-items: center; gap: 0.4rem;">
+              <input type="checkbox" id="param-use-ramping"
+                style="accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;">
+              <label for="param-use-ramping"
+                style="font-size: 0.8rem; cursor: pointer; color: #38bdf8; font-weight: 600;">Ativar</label>
+            </div>
+          </div>
+          <p style="font-size: 0.75rem; color: #94a3b8; margin: 0 0 0.6rem 0;">
+            A fresa desce em rampa suave ao longo do percurso, eliminando esforço de mergulho vertical.
+          </p>
+          <div id="ramping-settings-grid" class="input-grid"
+            style="opacity: 0.45; pointer-events: none; transition: opacity 0.2s ease;">
+            <div class="input-field">
+              <label for="param-ramp-angle">Ângulo Rampa (°)</label>
+              <input type="number" id="param-ramp-angle" value="10" min="2" max="45" step="1">
+            </div>
+            <div class="input-field">
+              <label for="param-ramp-max-len">Comprimento Máx (mm)</label>
+              <input type="number" id="param-ramp-max-len" value="30" min="5" max="200" step="5">
+            </div>
+          </div>
+        </div>
+
         <div class="panel-actions">
           <button id="btn-generate" class="primary-btn">⚙️ Gerar Trajectória</button>
           <button id="btn-open-sim3d" class="secondary-btn" title="Ver simulação do corte em 3D">👁️ Ver no Simulador
@@ -800,7 +854,7 @@
     <button id="cam-toast-action" class="cam-toast-btn">👁️ Abrir Simulador 3D</button>
   </div>
 
-  <script type="module" src="./src/app.js?v=0.9.0"></script>
+  <script type="module" src="./src/app.js?v=0.10.0"></script>
 </body>
 
 </html>
