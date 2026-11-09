@@ -96,6 +96,49 @@ body {
   flex-grow: 1;
 }
 
+/* CLUSTERS DA BARRA SUPERIOR (ESTILO ERGONÓMICO VECTRIC) */
+.toolbar-cluster {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  justify-content: center;
+}
+
+.cluster-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  padding-left: 0.2rem;
+  user-select: none;
+}
+
+.cluster-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.btn-icon {
+  font-size: 0.95rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-text {
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.btn-compact {
+  padding: 0.45rem 0.65rem;
+  min-width: 34px;
+  justify-content: center;
+}
+
 /* BOTÕES E CONTROLOS */
 .tool-group,
 .action-group,
@@ -106,7 +149,7 @@ body {
 
 button {
   font-family: var(--font-main);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   font-weight: 500;
   border-radius: 8px;
   border: 1px solid var(--panel-border);
@@ -114,7 +157,7 @@ button {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.5rem 0.9rem;
+  padding: 0.45rem 0.8rem;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   color: var(--text-main);
 }
@@ -230,18 +273,215 @@ button:disabled {
   color: var(--text-muted);
 }
 
-/* PAINEL LATERAL DIREITO */
+/* PAINEL LATERAL DIREITO (ESTILO VECTRIC VCARVE) */
 #sidebar {
-  width: 350px;
-  background: rgba(13, 17, 28, 0.75);
+  width: 360px;
+  background: rgba(13, 17, 28, 0.85);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-left: 1px solid var(--panel-border);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  position: relative;
+}
+
+/* NAVEGAÇÃO POR SEPARADORES (VECTRIC TABS) */
+.sidebar-tab-bar {
+  display: flex;
+  background: rgba(8, 11, 17, 0.9);
+  border-bottom: 1px solid var(--panel-border);
+  padding: 0.35rem 0.6rem 0;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.sidebar-nav-tab {
+  flex: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  padding: 0.55rem 0.35rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all 0.2s ease;
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sidebar-nav-tab .tab-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.sidebar-nav-tab:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+}
+
+.sidebar-nav-tab.active {
+  background: rgba(17, 24, 39, 0.8);
+  border-color: var(--panel-border);
+  border-bottom-color: rgba(17, 24, 39, 0.8);
+  color: var(--accent);
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.sidebar-tab-content {
+  flex: 1;
   overflow-y: auto;
-  padding: 1.5rem;
-  gap: 1.5rem;
+  padding: 1.25rem 1.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* GRELHA DE ESTRATÉGIAS VECTRIC */
+.section-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.2rem;
+}
+
+.active-strat-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 12px;
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.strategy-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.45rem;
+}
+
+.strat-btn {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0.55rem 0.3rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: center;
+  position: relative;
+}
+
+.strat-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.strat-btn .strat-icon {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.strat-btn .strat-name {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.strat-btn .strat-badge {
+  font-size: 0.63rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+}
+
+/* Estados Ativos Específicos por Estratégia */
+.strat-btn[data-strategy="outside"].active {
+  background: rgba(56, 189, 248, 0.14);
+  border-color: #38bdf8;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.3);
+}
+.strat-btn[data-strategy="outside"].active .strat-name,
+.strat-btn[data-strategy="outside"].active .strat-badge {
+  color: #38bdf8;
+}
+
+.strat-btn[data-strategy="inside"].active {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: #f59e0b;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
+}
+.strat-btn[data-strategy="inside"].active .strat-name,
+.strat-btn[data-strategy="inside"].active .strat-badge {
+  color: #f59e0b;
+}
+
+.strat-btn[data-strategy="pocket"].active {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: #10b981;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+}
+.strat-btn[data-strategy="pocket"].active .strat-name,
+.strat-btn[data-strategy="pocket"].active .strat-badge {
+  color: #10b981;
+}
+
+.strat-btn[data-strategy="chamfer"].active {
+  background: rgba(168, 85, 247, 0.14);
+  border-color: #a855f7;
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.3);
+}
+.strat-btn[data-strategy="chamfer"].active .strat-name,
+.strat-btn[data-strategy="chamfer"].active .strat-badge {
+  color: #c084fc;
+}
+
+.strat-btn[data-strategy="on"].active {
+  background: rgba(236, 72, 153, 0.14);
+  border-color: #ec4899;
+  box-shadow: 0 0 12px rgba(236, 72, 153, 0.3);
+}
+.strat-btn[data-strategy="on"].active .strat-name,
+.strat-btn[data-strategy="on"].active .strat-badge {
+  color: #ec4899;
+}
+
+/* RODAPÉ FIXO DO PAINEL LATERAL */
+.sidebar-pinned-actions {
+  padding: 0.85rem 1.3rem;
+  background: rgba(10, 14, 23, 0.96);
+  border-top: 1px solid var(--panel-border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.35);
+  z-index: 5;
+  flex-shrink: 0;
+}
+
+.action-dual-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.action-dual-row button {
+  flex: 1;
+  font-size: 0.84rem;
+  padding: 0.6rem 0.4rem;
 }
 
 .panel-section {

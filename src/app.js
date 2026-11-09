@@ -120,6 +120,8 @@ function init() {
   updateTableSize();
   initToolLibrary(); // Inicializar biblioteca de ferramentas
   setupEventListeners();
+  switchSidebarTab('cam'); // Iniciar no separador de Percursos CAM (Vectric)
+  syncStrategyUI(selectStrategy ? selectStrategy.value : 'outside', false);
   setupPWAInstall(); // Configurar suporte de instalação PWA e offline
   loadAppState().then(() => {
     initHistory();
@@ -1952,23 +1954,31 @@ function setupEventListeners() {
   if (selectStrategy) {
     selectStrategy.addEventListener('change', () => {
       const val = selectStrategy.value;
-      toggleChamferSettings(val === 'chamfer');
-
-      const activeObj = canvas.getActiveObject();
-      if (activeObj && !activeObj.isVisualPath && !activeObj.isOriginMarker) {
-        if (activeObj.type === 'activeSelection') {
-          activeObj.forEachObject(child => applyStrategyToObject(child, val));
-        } else {
-          applyStrategyToObject(activeObj, val);
-        }
-        canvas.requestRenderAll();
-        saveAppState();
-        recordHistoryState();
-        clearVisualToolpaths();
-        showCamToast(`🎨 Contorno definido como: ${getStrategyLabel(val)}`);
-      }
+      syncStrategyUI(val, true);
     });
   }
+
+  // Separadores da Barra Lateral (Vectric VCarve layout)
+  const tabBtnCam = document.getElementById('tab-btn-cam');
+  const tabBtnMaterial = document.getElementById('tab-btn-material');
+  const tabBtnGcode = document.getElementById('tab-btn-gcode');
+
+  if (tabBtnCam) tabBtnCam.addEventListener('click', () => switchSidebarTab('cam'));
+  if (tabBtnMaterial) tabBtnMaterial.addEventListener('click', () => switchSidebarTab('material'));
+  if (tabBtnGcode) tabBtnGcode.addEventListener('click', () => switchSidebarTab('gcode'));
+
+  // Botões de Estratégia da Grelha Vectric
+  const stratBtns = document.querySelectorAll('.strat-btn');
+  stratBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const strat = btn.getAttribute('data-strategy');
+      if (strat) {
+        syncStrategyUI(strat, true);
+        clearVisualToolpaths();
+        saveAppState();
+      }
+    });
+  });
 
   // Listeners para parâmetros de Chanfro
   [inputChamferWidth, paramChamferAngle, paramChamferSide, paramChamferTipOffset].forEach(el => {
@@ -2850,10 +2860,9 @@ function updateSelectionState() {
       }
     }
 
-    // Sincronizar o dropdown de estratégia com a estratégia do contorno selecionado
-    if (activeObject.camStrategy && selectStrategy) {
-      selectStrategy.value = activeObject.camStrategy;
-      toggleChamferSettings(activeObject.camStrategy === 'chamfer');
+    // Sincronizar o dropdown de estratégia e a grelha Vectric com o contorno selecionado
+    if (activeObject.camStrategy) {
+      syncStrategyUI(activeObject.camStrategy, false);
     }
   } else {
     btnDelete.classList.add('disabled');
@@ -5880,7 +5889,7 @@ async function loadAppState() {
       inputFeedZ.value = p.feedZ || 400;
       inputDepthTotal.value = p.depthTotal || -3.0;
       inputDepthPass.value = p.depthPass || 1.0;
-      selectStrategy.value = p.strategy || 'on';
+      syncStrategyUI(p.strategy || 'outside', false);
       inputTableX.value = p.tableX || 500;
       inputTableY.value = p.tableY || 500;
       inputMaterialZ.value = p.materialZ || 10.0;
@@ -6067,6 +6076,96 @@ function applyStrategyToObject(obj, strategyVal) {
 }
 
 /**
+ * Sincroniza a interface de estratégias (Grelha de botões Vectric, badge e select)
+ */
+function syncStrategyUI(strategyVal, applyToSelection = false) {
+  if (!strategyVal) strategyVal = 'outside';
+  
+  if (selectStrategy && selectStrategy.value !== strategyVal) {
+    selectStrategy.value = strategyVal;
+  }
+
+  // Atualizar botões visuais da grelha Vectric
+  const stratBtns = document.querySelectorAll('.strat-btn');
+  stratBtns.forEach(btn => {
+    if (btn.getAttribute('data-strategy') === strategyVal) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+
+  // Atualizar badge indicador de estratégia no cabeçalho da secção
+  const stratIndicator = document.getElementById('active-strat-indicator');
+  if (stratIndicator) {
+    stratIndicator.textContent = getStrategyLabel(strategyVal);
+    const badgeColors = {
+      outside: { bg: 'rgba(56, 189, 248, 0.15)', border: 'rgba(56, 189, 248, 0.4)', text: '#38bdf8' },
+      inside:  { bg: 'rgba(245, 158, 11, 0.15)', border: 'rgba(245, 158, 11, 0.4)', text: '#f59e0b' },
+      pocket:  { bg: 'rgba(16, 185, 129, 0.15)', border: 'rgba(16, 185, 129, 0.4)', text: '#10b981' },
+      chamfer: { bg: 'rgba(168, 85, 247, 0.15)', border: 'rgba(168, 85, 247, 0.4)', text: '#c084fc' },
+      on:      { bg: 'rgba(236, 72, 153, 0.15)', border: 'rgba(236, 72, 153, 0.4)', text: '#ec4899' }
+    };
+    const c = badgeColors[strategyVal] || badgeColors.outside;
+    stratIndicator.style.background = c.bg;
+    stratIndicator.style.borderColor = c.border;
+    stratIndicator.style.color = c.text;
+  }
+
+  // Visibilidade condicional de painéis
+  toggleChamferSettings(strategyVal === 'chamfer');
+  
+  const stepoverContainer = document.getElementById('stepover-field-container');
+  if (stepoverContainer) {
+    stepoverContainer.style.display = (strategyVal === 'pocket') ? 'flex' : 'none';
+  }
+
+  // Aplicar à seleção ativa no canvas se solicitado
+  if (applyToSelection && typeof canvas !== 'undefined' && canvas) {
+    const activeObj = canvas.getActiveObject();
+    if (activeObj && !activeObj.isVisualPath && !activeObj.isOriginMarker) {
+      if (activeObj.type === 'activeSelection') {
+        activeObj.forEachObject(child => applyStrategyToObject(child, strategyVal));
+      } else {
+        applyStrategyToObject(activeObj, strategyVal);
+      }
+      canvas.requestRenderAll();
+      saveAppState();
+      recordHistoryState();
+      clearVisualToolpaths();
+      showCamToast(`🎨 Contorno definido como: ${getStrategyLabel(strategyVal)}`);
+    }
+  }
+}
+
+/**
+ * Alterna entre os separadores do painel lateral (Percursos, Mesa, G-code)
+ */
+function switchSidebarTab(tabName) {
+  const tabs = [
+    { btnId: 'tab-btn-cam', contentId: 'sidebar-content-cam', name: 'cam' },
+    { btnId: 'tab-btn-material', contentId: 'sidebar-content-material', name: 'material' },
+    { btnId: 'tab-btn-gcode', contentId: 'sidebar-content-gcode', name: 'gcode' }
+  ];
+
+  tabs.forEach(t => {
+    const btn = document.getElementById(t.btnId);
+    const content = document.getElementById(t.contentId);
+    const isActive = (t.name === tabName);
+
+    if (btn) {
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    }
+    if (content) {
+      content.style.display = isActive ? 'flex' : 'none';
+      if (isActive) content.classList.add('active');
+      else content.classList.remove('active');
+    }
+  });
+}
+
+/**
  * Define a estratégia CAM do objeto clicado com o botão direito
  */
 function setRightClickedObjectStrategy(strategyVal) {
@@ -6077,10 +6176,7 @@ function setRightClickedObjectStrategy(strategyVal) {
   } else {
     applyStrategyToObject(target, strategyVal);
   }
-  if (selectStrategy) {
-    selectStrategy.value = strategyVal;
-    toggleChamferSettings(strategyVal === 'chamfer');
-  }
+  syncStrategyUI(strategyVal, false);
   canvas.requestRenderAll();
   saveAppState();
   recordHistoryState();

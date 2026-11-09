@@ -33,73 +33,80 @@
 
       <div class="divider"></div>
 
-      <div class="tool-group">
-        <button id="tool-select" class="tool-btn active" title="Selecionar e Mover">
-          <span class="icon">🔀</span> Seleção
-        </button>
-        <button id="tool-rect" class="tool-btn" title="Desenhar Retângulo">
-          <span class="icon">⬜</span> Retângulo
-        </button>
-        <button id="tool-circle" class="tool-btn" title="Desenhar Círculo">
-          <span class="icon">⚪</span> Círculo
-        </button>
-        <button id="tool-line" class="tool-btn" title="Desenhar Linha">
-          <span class="icon">➖</span> Linha
-        </button>
+      <!-- Cluster 1: Criar Vetores / Desenho -->
+      <div class="toolbar-cluster" title="Ferramentas de Desenho 2D">
+        <span class="cluster-label">Desenho</span>
+        <div class="cluster-buttons">
+          <button id="tool-select" class="tool-btn active" title="Selecionar e Mover Objetos">
+            <span class="btn-icon">🔲</span> <span class="btn-text">Mover</span>
+          </button>
+          <button id="tool-rect" class="tool-btn" title="Desenhar Retângulo">
+            <span class="btn-icon">▭</span> <span class="btn-text">Retângulo</span>
+          </button>
+          <button id="tool-circle" class="tool-btn" title="Desenhar Círculo">
+            <span class="btn-icon">⭕</span> <span class="btn-text">Círculo</span>
+          </button>
+          <button id="tool-line" class="tool-btn" title="Desenhar Linha">
+            <span class="btn-icon">📏</span> <span class="btn-text">Linha</span>
+          </button>
+        </div>
       </div>
 
       <div class="divider"></div>
 
-      <div class="action-group">
-        <input type="file" id="file-import" accept=".svg,.png,.jpg,.jpeg,.dxf" style="display: none;">
-        <button id="btn-import-trigger" class="action-btn"
-          title="Importar DXF, SVG, PNG ou JPG (ou arrastar para a mesa)">
-          📥 Importar
-        </button>
-        <button id="btn-vectorize" class="action-btn disabled"
-          title="Converter imagem raster selecionada em contorno vetorial" disabled>
-          ⚡ Vetorizar
-        </button>
-        <button id="btn-ungroup" class="action-btn disabled"
-          title="Desagrupar contornos ou separar cavidades do desenho selecionado (DXF/SVG)" disabled>
-          🧩 Desagrupar
-        </button>
-        <button id="btn-undo" class="action-btn disabled"
-          title="Desfazer última alteração (Ctrl+Z)" disabled>
-          ↩️ Desfazer
-        </button>
-        <button id="btn-redo" class="action-btn disabled"
-          title="Refazer alteração desfeita (Ctrl+Y ou Ctrl+Shift+Z)" disabled>
-          ↪️ Refazer
-        </button>
-        <input type="file" id="file-import-3d" accept=".png,.jpg,.jpeg,.webp" style="display: none;">
-        <button id="btn-import-3d" class="action-btn relief-btn"
-          title="Importar fotografia para Corte 3D por Relevo (Grayscale Relief Carving)">
-          🖼️ Corte 3D
-        </button>
+      <!-- Cluster 2: Ficheiro e Operações Vetoriais -->
+      <div class="toolbar-cluster" title="Ficheiros e Operações com Vetores">
+        <span class="cluster-label">Vetores</span>
+        <div class="cluster-buttons">
+          <input type="file" id="file-import" accept=".svg,.png,.jpg,.jpeg,.dxf" style="display: none;">
+          <button id="btn-import-trigger" class="action-btn" title="Importar DXF, SVG ou Imagem (ou arrastar para a mesa)">
+            <span class="btn-icon">📥</span> <span class="btn-text">Importar</span>
+          </button>
+          <button id="btn-vectorize" class="action-btn disabled" title="Converter imagem bitmap em contornos vetoriais" disabled>
+            <span class="btn-icon">⚡</span> <span class="btn-text">Vetorizar</span>
+          </button>
+          <button id="btn-ungroup" class="action-btn disabled" title="Desagrupar contornos ou separar cavidades do desenho" disabled>
+            <span class="btn-icon">🧩</span> <span class="btn-text">Desagrupar</span>
+          </button>
+          <input type="file" id="file-import-3d" accept=".png,.jpg,.jpeg,.webp" style="display: none;">
+          <button id="btn-import-3d" class="action-btn relief-btn" title="Corte de Fotografia em Relevo 3D">
+            <span class="btn-icon">🖼️</span> <span class="btn-text">Relevo 3D</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Cluster 3: Histórico e Edição -->
+      <div class="toolbar-cluster" title="Histórico e Edição">
+        <span class="cluster-label">Ações</span>
+        <div class="cluster-buttons">
+          <button id="btn-undo" class="action-btn btn-compact disabled" title="Desfazer última alteração (Ctrl+Z)" disabled>
+            <span class="btn-icon">↩️</span>
+          </button>
+          <button id="btn-redo" class="action-btn btn-compact disabled" title="Refazer alteração desfeita (Ctrl+Y)" disabled>
+            <span class="btn-icon">↪️</span>
+          </button>
+          <button id="btn-delete" class="danger-btn disabled" title="Eliminar contorno selecionado (Delete)" disabled>
+            <span class="btn-icon">❌</span> <span class="btn-text">Apagar</span>
+          </button>
+          <button id="btn-clear" class="danger-btn" title="Limpar todos os desenhos da mesa">
+            <span class="btn-icon">🗑️</span> <span class="btn-text">Limpar</span>
+          </button>
+        </div>
       </div>
 
       <div class="spacer"></div>
 
+      <!-- Cluster 4: Sistema / PWA -->
       <div class="install-group" style="display: flex; gap: 0.45rem; align-items: center;">
-        <button id="btn-version-badge" class="action-btn version-badge-btn"
-          title="Gcoded CAM v0.10.2 - Clica para abrir o painel de atualizações ou ver novidades">
+        <button id="btn-version-badge" class="action-btn version-badge-btn" title="Gcoded CAM v0.10.6 - Clica para ver notas de versão">
           <span class="icon">🚀</span>
-          <span id="version-badge-text">v0.10.2</span>
+          <span id="version-badge-text">v0.10.6</span>
           <span id="version-pulse-dot" class="version-dot"></span>
         </button>
-        <button id="btn-install-app" class="action-btn install-btn"
-          title="Instalar Gcoded no computador ou telemóvel para acesso rápido e 100% offline">
-          <span class="icon">📲</span> <span class="install-text">Instalar App</span>
-        </button>
-      </div>
-
-      <div class="danger-group">
-        <button id="btn-delete" class="danger-btn disabled" title="Eliminar objecto selecionado" disabled>
-          ❌ Apagar
-        </button>
-        <button id="btn-clear" class="danger-btn" title="Limpar todo o canvas">
-          🗑️ Limpar Tudo
+        <button id="btn-install-app" class="action-btn install-btn" title="Instalar Gcoded no computador ou telemóvel para acesso 100% offline">
+          <span class="icon">📲</span> <span class="install-text">Instalar</span>
         </button>
       </div>
     </header>
@@ -181,300 +188,355 @@
         </div>
       </section>
 
-      <!-- PAINEL LATERAL DIREITO (PARÂMETROS CNC EXCLUSIVO PARA FRESAS & ROUTERS) -->
+      <!-- PAINEL LATERAL DIREITO (ESTILO VECTRIC VCARVE) -->
       <aside id="sidebar">
-        <div class="panel-section">
-          <h2>Mesa de Corte & Material (mm)</h2>
-          <div class="input-grid">
-            <div class="input-field">
-              <label for="param-table-x">Largura Mesa (X)</label>
-              <input type="number" id="param-table-x" value="500" step="50" min="100" max="2000">
-            </div>
-            <div class="input-field">
-              <label for="param-table-y">Altura Mesa (Y)</label>
-              <input type="number" id="param-table-y" value="500" step="50" min="100" max="2000">
-            </div>
-          </div>
-          <div class="input-field" style="margin-top: 0.4rem;">
-            <label for="param-material-z">Espessura Material (Z)</label>
-            <input type="number" id="param-material-z" value="10.0" step="0.5" min="0.5" max="100">
-          </div>
+        <!-- Navegação por Separadores / Tabs Vectric -->
+        <div class="sidebar-tab-bar" role="tablist">
+          <button id="tab-btn-cam" class="sidebar-nav-tab active" role="tab" aria-selected="true" data-tab="cam">
+            <span class="tab-icon">⚙️</span>
+            <span class="tab-label">Percursos</span>
+          </button>
+          <button id="tab-btn-material" class="sidebar-nav-tab" role="tab" aria-selected="false" data-tab="material">
+            <span class="tab-icon">📐</span>
+            <span class="tab-label">Mesa & Chapa</span>
+          </button>
+          <button id="tab-btn-gcode" class="sidebar-nav-tab" role="tab" aria-selected="false" data-tab="gcode">
+            <span class="tab-icon">📄</span>
+            <span class="tab-label">Código G</span>
+          </button>
         </div>
 
-        <div class="panel-section">
-          <h2>Origem do Trabalho (X0 Y0)</h2>
-          <div class="input-field">
-            <label for="param-origin-type">Alinhamento na Mesa</label>
-            <select id="param-origin-type">
-              <option value="bottom-left" selected>Canto Inferior Esquerdo da Mesa</option>
-              <option value="top-left">Canto Superior Esquerdo da Mesa</option>
-              <option value="top-right">Canto Superior Direito da Mesa</option>
-              <option value="bottom-right">Canto Inferior Direito da Mesa</option>
-              <option value="center">Centro da Mesa</option>
-              <option value="custom">Offset Personalizado (G54)</option>
-            </select>
-          </div>
-          <div class="input-grid" style="margin-top: 0.4rem;">
-            <div class="input-field">
-              <label for="param-wcs-x">Posição X (mm)</label>
-              <input type="number" id="param-wcs-x" value="0.0" step="5" min="0" max="2000" readonly
-                style="opacity: 0.6;">
+        <!-- Conteúdo do Separador 1: Percursos CAM -->
+        <div id="sidebar-content-cam" class="sidebar-tab-content active">
+          <!-- Cartão de Estratégias Vectric -->
+          <div class="panel-section">
+            <div class="section-title-row">
+              <h2>Estratégia de Fresagem</h2>
+              <span id="active-strat-indicator" class="active-strat-badge">Perfil Exterior</span>
             </div>
-            <div class="input-field">
-              <label for="param-wcs-y">Posição Y (mm)</label>
-              <input type="number" id="param-wcs-y" value="0.0" step="5" min="0" max="2000" readonly
-                style="opacity: 0.6;">
-            </div>
-          </div>
-        </div>
 
-        <div class="panel-section">
-          <h2>Parâmetros da Fresa (CNC Router)</h2>
-          <div class="input-field tool-library-field">
-            <label for="select-tool-library">Biblioteca de Fresas</label>
-            <div class="tool-library-row">
-              <select id="select-tool-library">
-                <!-- Preenchido dinamicamente via JS -->
-              </select>
-              <button id="btn-open-tool-manager" class="primary-btn tool-manager-btn"
-                style="padding: 0 0.8rem; height: 38px; font-size: 0.8rem; white-space: nowrap;">⚙️ Gerir</button>
+            <!-- Grelha de botões visuais Vectric -->
+            <div class="strategy-grid">
+              <button type="button" class="strat-btn active" data-strategy="outside" title="Perfil Exterior (+R): fresa corta por fora do contorno">
+                <span class="strat-icon">🟦</span>
+                <span class="strat-name">Exterior</span>
+                <span class="strat-badge">+Raio</span>
+              </button>
+              <button type="button" class="strat-btn" data-strategy="inside" title="Perfil Interior (-R): fresa corta por dentro para furos e recortes">
+                <span class="strat-icon">🟧</span>
+                <span class="strat-name">Interior</span>
+                <span class="strat-badge">-Raio</span>
+              </button>
+              <button type="button" class="strat-btn" data-strategy="pocket" title="Desbaste / Pocket: esvazia o interior do contorno com passagens concêntricas">
+                <span class="strat-icon">🟩</span>
+                <span class="strat-name">Pocket</span>
+                <span class="strat-badge">Desbaste</span>
+              </button>
+              <button type="button" class="strat-btn" data-strategy="chamfer" title="Chanfro nas Arestas: quebra de canto a 45° ou 60° com fresa cónica">
+                <span class="strat-icon">🟪</span>
+                <span class="strat-name">Chanfro</span>
+                <span class="strat-badge">Bisel</span>
+              </button>
+              <button type="button" class="strat-btn" data-strategy="on" title="Sobre a Linha: centro da fresa segue o vetor para gravação">
+                <span class="strat-icon">🌸</span>
+                <span class="strat-name">Na Linha</span>
+                <span class="strat-badge">Gravar</span>
+              </button>
             </div>
-          </div>
-          <div class="input-grid">
-            <div class="input-field">
-              <label for="param-tool-type">Tipo de Fresa</label>
-              <select id="param-tool-type">
-                <option value="flat">🟦 Topo Plano (End Mill)</option>
-                <option value="ball">🟣 Esférica (Ball Nose)</option>
-                <option value="vbit">🔺 Cónica / V-Bit (60°/90°)</option>
-                <option value="chamfer">📐 Fresa de Chanfro (Chamfer Mill 45°/90°)</option>
-                <option value="surfacing">🟫 Aplanar Mesa (Flycutter)</option>
+
+            <!-- Select original mantido para 100% de compatibilidade funcional -->
+            <div class="input-field" style="display: none;">
+              <select id="param-strategy">
+                <option value="outside" selected>Exterior (Perfil / Profile) - Compensação +R</option>
+                <option value="inside">Interior (Perfil / Furo) - Compensação -R</option>
+                <option value="pocket">Caixa / Pocket (Desbaste Concêntrico)</option>
+                <option value="chamfer">📐 Chanfro nas Arestas (Chamfer / Bisel)</option>
+                <option value="on">Sobre a Linha (Gravação / Engrave)</option>
               </select>
             </div>
-            <div class="input-field">
-              <label id="lbl-spindle-speed" for="param-spindle-speed">Rotação Router (RPM)</label>
-              <input type="number" id="param-spindle-speed" value="18000" step="1000" min="6000" max="30000">
-            </div>
-          </div>
-          <div class="input-grid" style="margin-top: 0.4rem;">
-            <div class="input-field">
-              <label for="param-tool-dia">Diâmetro de Corte (mm)</label>
-              <input type="number" id="param-tool-dia" value="3.175" step="0.001" min="0.1">
-            </div>
-            <div class="input-field">
-              <label for="param-safe-z">Z Segurança (mm)</label>
-              <input type="number" id="param-safe-z" value="5.0" step="0.5" min="1">
-            </div>
-          </div>
-        </div>
 
-        <div class="panel-section">
-          <h2>Avanços & Passo Lateral</h2>
-          <div class="input-grid">
-            <div class="input-field">
-              <label for="param-feed-xy">Avanço Corte XY (mm/min)</label>
-              <input type="number" id="param-feed-xy" value="1400" step="50" min="50">
-            </div>
-            <div class="input-field">
-              <label for="param-feed-z">Avanço Mergulho Z (mm/min)</label>
-              <input type="number" id="param-feed-z" value="400" step="50" min="50">
+            <!-- Parâmetros de Chanfro nas Arestas (Chamfer) -->
+            <div id="chamfer-settings-grid" style="display: none; margin-top: 0.6rem; padding: 0.6rem; background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 6px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem;">
+                <span style="font-size: 0.82rem; font-weight: 600; color: #c084fc;">📐 Configuração do Chanfro</span>
+                <span id="lbl-chamfer-depth-calc" style="font-size: 0.75rem; color: #a855f7; font-family: monospace;">Z = -1.50 mm</span>
+              </div>
+              <div class="input-grid">
+                <div class="input-field">
+                  <label for="param-chamfer-width">Largura Chanfro (mm)</label>
+                  <input type="number" id="param-chamfer-width" value="1.0" min="0.1" max="10.0" step="0.1">
+                </div>
+                <div class="input-field">
+                  <label for="param-chamfer-angle">Ângulo Fresa (°)</label>
+                  <select id="param-chamfer-angle">
+                    <option value="90" selected>90° (Bisel 45°)</option>
+                    <option value="60">60° (Bisel 30°)</option>
+                    <option value="120">120° (Bisel 60°)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="input-grid" style="margin-top: 0.4rem;">
+                <div class="input-field">
+                  <label for="param-chamfer-side">Aresta de Aplicação</label>
+                  <select id="param-chamfer-side">
+                    <option value="outside" selected>Aresta Exterior (Peça)</option>
+                    <option value="inside">Aresta Interior (Cavidade)</option>
+                    <option value="on">Centrado na Aresta</option>
+                  </select>
+                </div>
+                <div class="input-field">
+                  <label for="param-chamfer-tip-offset">Folga Ponta (mm)</label>
+                  <input type="number" id="param-chamfer-tip-offset" value="0.5" min="0.0" max="3.0" step="0.1" title="Desce a fresa além da ponta para cortar com a lâmina lateral afiada">
+                </div>
+              </div>
             </div>
           </div>
-          <div class="input-field" style="margin-top: 0.4rem;">
-            <label for="param-stepover">Passo Lateral / Stepover (%)</label>
-            <input type="number" id="param-stepover" value="40" step="5" min="5" max="95">
-          </div>
-        </div>
 
-        <div class="panel-section">
-          <h2>Profundidades (mm)</h2>
-          <div class="input-grid">
-            <div class="input-field">
-              <label for="param-depth-total">Profundidade Total</label>
-              <input type="number" id="param-depth-total" value="-3.0" step="0.1" max="0">
-            </div>
-            <div class="input-field">
-              <label for="param-depth-pass">Passo por Descida (Z)</label>
-              <input type="number" id="param-depth-pass" value="1.0" step="0.1" min="0.1">
-            </div>
-          </div>
-        </div>
-
-        <div class="panel-section">
-          <h2>Estratégia & Interpolação</h2>
-          <div class="input-field">
-            <label for="param-strategy">Estratégia & Compensação de Raio</label>
-            <select id="param-strategy">
-              <option value="outside" selected>Exterior (Perfil / Profile) - Compensação +R</option>
-              <option value="inside">Interior (Perfil / Furo) - Compensação -R</option>
-              <option value="pocket">Caixa / Pocket (Desbaste Concêntrico)</option>
-              <option value="chamfer">📐 Chanfro nas Arestas (Chamfer / Bisel)</option>
-              <option value="on">Sobre a Linha (Gravação / Engrave)</option>
-            </select>
-          </div>
-          <!-- Parâmetros de Chanfro nas Arestas (Chamfer) -->
-          <div id="chamfer-settings-grid" style="display: none; margin-top: 0.6rem; padding: 0.6rem; background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 6px;">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem;">
-              <span style="font-size: 0.82rem; font-weight: 600; color: #c084fc;">📐 Configuração do Chanfro</span>
-              <span id="lbl-chamfer-depth-calc" style="font-size: 0.75rem; color: #a855f7; font-family: monospace;">Z = -1.50 mm</span>
+          <!-- Parâmetros da Fresa (CNC Router) -->
+          <div class="panel-section">
+            <h2>Fresa & Rotação</h2>
+            <div class="input-field tool-library-field">
+              <label for="select-tool-library">Biblioteca de Fresas</label>
+              <div class="tool-library-row">
+                <select id="select-tool-library">
+                  <!-- Preenchido dinamicamente via JS -->
+                </select>
+                <button id="btn-open-tool-manager" class="primary-btn tool-manager-btn"
+                  style="padding: 0 0.8rem; height: 38px; font-size: 0.8rem; white-space: nowrap;">⚙️ Gerir</button>
+              </div>
             </div>
             <div class="input-grid">
               <div class="input-field">
-                <label for="param-chamfer-width">Largura Chanfro (mm)</label>
-                <input type="number" id="param-chamfer-width" value="1.0" min="0.1" max="10.0" step="0.1">
+                <label for="param-tool-type">Tipo de Fresa</label>
+                <select id="param-tool-type">
+                  <option value="flat">🟦 Topo Plano (End Mill)</option>
+                  <option value="ball">🟣 Esférica (Ball Nose)</option>
+                  <option value="vbit">🔺 Cónica / V-Bit (60°/90°)</option>
+                  <option value="chamfer">📐 Fresa de Chanfro (45°/90°)</option>
+                  <option value="surfacing">🟫 Aplanar Mesa (Flycutter)</option>
+                </select>
               </div>
               <div class="input-field">
-                <label for="param-chamfer-angle">Ângulo Fresa (°)</label>
-                <select id="param-chamfer-angle">
-                  <option value="90" selected>90° (Bisel 45°)</option>
-                  <option value="60">60° (Bisel 30°)</option>
-                  <option value="120">120° (Bisel 60°)</option>
-                </select>
+                <label id="lbl-spindle-speed" for="param-spindle-speed">Rotação (RPM)</label>
+                <input type="number" id="param-spindle-speed" value="18000" step="1000" min="6000" max="30000">
               </div>
             </div>
             <div class="input-grid" style="margin-top: 0.4rem;">
               <div class="input-field">
-                <label for="param-chamfer-side">Aresta de Aplicação</label>
-                <select id="param-chamfer-side">
-                  <option value="outside" selected>Aresta Exterior (Peça)</option>
-                  <option value="inside">Aresta Interior (Cavidade)</option>
-                  <option value="on">Centrado na Aresta</option>
-                </select>
+                <label for="param-tool-dia">Diâmetro Fresa (mm)</label>
+                <input type="number" id="param-tool-dia" value="3.175" step="0.001" min="0.1">
               </div>
               <div class="input-field">
-                <label for="param-chamfer-tip-offset">Folga Ponta (mm)</label>
-                <input type="number" id="param-chamfer-tip-offset" value="0.5" min="0.0" max="3.0" step="0.1" title="Desce a fresa além da ponta para cortar com a lâmina lateral afiada">
+                <label for="param-safe-z">Z Segurança (mm)</label>
+                <input type="number" id="param-safe-z" value="5.0" step="0.5" min="1">
               </div>
             </div>
           </div>
-          <div class="checkbox-field" style="margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
-            <input type="checkbox" id="param-use-arcs" checked
-              style="accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;">
-            <label for="param-use-arcs" style="font-size: 0.8rem; cursor: pointer; color: #cbd5e1;">Interpolação
-              Circular Nativa (G2/G3 I,J)</label>
+
+          <!-- Profundidades & Avanços -->
+          <div class="panel-section">
+            <h2>Profundidades & Avanços</h2>
+            <div class="input-grid">
+              <div class="input-field">
+                <label for="param-depth-total">Profundidade Total (mm)</label>
+                <input type="number" id="param-depth-total" value="-3.0" step="0.1" max="0">
+              </div>
+              <div class="input-field">
+                <label for="param-depth-pass">Passo Descida Z (mm)</label>
+                <input type="number" id="param-depth-pass" value="1.0" step="0.1" min="0.1">
+              </div>
+            </div>
+            <div class="input-grid" style="margin-top: 0.4rem;">
+              <div class="input-field">
+                <label for="param-feed-xy">Avanço XY (mm/min)</label>
+                <input type="number" id="param-feed-xy" value="1400" step="50" min="50">
+              </div>
+              <div class="input-field">
+                <label for="param-feed-z">Mergulho Z (mm/min)</label>
+                <input type="number" id="param-feed-z" value="400" step="50" min="50">
+              </div>
+            </div>
+            <div class="input-field" id="stepover-field-container" style="margin-top: 0.4rem;">
+              <label for="param-stepover">Passo Lateral / Stepover (%)</label>
+              <input type="number" id="param-stepover" value="40" step="5" min="5" max="95">
+            </div>
+          </div>
+
+          <!-- Opções Avançadas CNC -->
+          <div class="panel-section">
+            <h2>Opções Avançadas CNC</h2>
+            <div class="checkbox-field" style="margin-bottom: 0.6rem; display: flex; align-items: center; gap: 0.5rem;">
+              <input type="checkbox" id="param-use-arcs" checked
+                style="accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;">
+              <label for="param-use-arcs" style="font-size: 0.8rem; cursor: pointer; color: #cbd5e1;">Interpolação Circular Nativa (G2/G3 I,J)</label>
+            </div>
+
+            <!-- Abas de Retenção -->
+            <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 6px; padding: 0.6rem; margin-bottom: 0.6rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+                <span style="font-size: 0.82rem; font-weight: 600; color: #e2e8f0;">🌉 Abas de Retenção (Tabs)</span>
+                <div class="checkbox-field" style="display: flex; align-items: center; gap: 0.35rem;">
+                  <input type="checkbox" id="param-use-tabs"
+                    style="accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;">
+                  <label for="param-use-tabs"
+                    style="font-size: 0.78rem; cursor: pointer; color: #38bdf8; font-weight: 600;">Ativar</label>
+                </div>
+              </div>
+              <div id="tabs-settings-grid" class="input-grid"
+                style="opacity: 0.45; pointer-events: none; transition: opacity 0.2s ease;">
+                <div class="input-field">
+                  <label for="param-tab-count">Quantidade</label>
+                  <input type="number" id="param-tab-count" value="4" min="1" max="20" step="1">
+                </div>
+                <div class="input-field">
+                  <label for="param-tab-width">Largura (mm)</label>
+                  <input type="number" id="param-tab-width" value="5.0" min="1.0" max="30.0" step="0.5">
+                </div>
+                <div class="input-field" style="grid-column: span 2;">
+                  <label for="param-tab-height">Espessura (mm)</label>
+                  <input type="number" id="param-tab-height" value="1.5" min="0.2" max="10.0" step="0.1">
+                </div>
+              </div>
+            </div>
+
+            <!-- Alívio de Cantos / Dogbone -->
+            <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 6px; padding: 0.6rem; margin-bottom: 0.6rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+                <span style="font-size: 0.82rem; font-weight: 600; color: #e2e8f0;">🦴 Alívio de Cantos (Dogbone)</span>
+                <div class="checkbox-field" style="display: flex; align-items: center; gap: 0.35rem;">
+                  <input type="checkbox" id="param-use-dogbone"
+                    style="accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;">
+                  <label for="param-use-dogbone"
+                    style="font-size: 0.78rem; cursor: pointer; color: #38bdf8; font-weight: 600;">Ativar</label>
+                </div>
+              </div>
+              <div id="dogbone-settings-grid" class="input-grid"
+                style="opacity: 0.45; pointer-events: none; transition: opacity 0.2s ease;">
+                <div class="input-field" style="grid-column: span 2;">
+                  <label for="param-dogbone-type">Estratégia</label>
+                  <select id="param-dogbone-type">
+                    <option value="dogbone" selected>🦴 Dogbone (Bissetriz 45°)</option>
+                    <option value="tbone-h">🪵 T-Bone Horizontal (Eixo X)</option>
+                    <option value="tbone-v">🪵 T-Bone Vertical (Eixo Y)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Entrada em Rampa -->
+            <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 6px; padding: 0.6rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+                <span style="font-size: 0.82rem; font-weight: 600; color: #e2e8f0;">📉 Entrada em Rampa (Ramping)</span>
+                <div class="checkbox-field" style="display: flex; align-items: center; gap: 0.35rem;">
+                  <input type="checkbox" id="param-use-ramping"
+                    style="accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;">
+                  <label for="param-use-ramping"
+                    style="font-size: 0.78rem; cursor: pointer; color: #38bdf8; font-weight: 600;">Ativar</label>
+                </div>
+              </div>
+              <div id="ramping-settings-grid" class="input-grid"
+                style="opacity: 0.45; pointer-events: none; transition: opacity 0.2s ease;">
+                <div class="input-field">
+                  <label for="param-ramp-angle">Ângulo (°)</label>
+                  <input type="number" id="param-ramp-angle" value="10" min="2" max="45" step="1">
+                </div>
+                <div class="input-field">
+                  <label for="param-ramp-max-len">Comp. Máx (mm)</label>
+                  <input type="number" id="param-ramp-max-len" value="30" min="5" max="200" step="5">
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div class="panel-section">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
-            <h2 style="margin: 0; font-size: 0.95rem;">Abas de Retenção (Holding Tabs)</h2>
-            <div class="checkbox-field" style="display: flex; align-items: center; gap: 0.4rem;">
-              <input type="checkbox" id="param-use-tabs"
-                style="accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;">
-              <label for="param-use-tabs"
-                style="font-size: 0.8rem; cursor: pointer; color: #38bdf8; font-weight: 600;">Ativar</label>
+        <!-- Conteúdo do Separador 2: Mesa & Chapa -->
+        <div id="sidebar-content-material" class="sidebar-tab-content" style="display: none;">
+          <div class="panel-section">
+            <h2>Dimensões da Mesa (mm)</h2>
+            <div class="input-grid">
+              <div class="input-field">
+                <label for="param-table-x">Largura Mesa (X)</label>
+                <input type="number" id="param-table-x" value="500" step="50" min="100" max="2000">
+              </div>
+              <div class="input-field">
+                <label for="param-table-y">Altura Mesa (Y)</label>
+                <input type="number" id="param-table-y" value="500" step="50" min="100" max="2000">
+              </div>
+            </div>
+            <div class="input-field" style="margin-top: 0.4rem;">
+              <label for="param-material-z">Espessura Material / Peça (Z)</label>
+              <input type="number" id="param-material-z" value="10.0" step="0.5" min="0.5" max="100">
             </div>
           </div>
-          <p style="font-size: 0.75rem; color: #94a3b8; margin: 0 0 0.6rem 0;">
-            Mantém pontes sólidas na última passagem para impedir que a peça cortada se solte da chapa.
-          </p>
-          <div id="tabs-settings-grid" class="input-grid"
-            style="opacity: 0.45; pointer-events: none; transition: opacity 0.2s ease;">
-            <div class="input-field">
-              <label for="param-tab-count">Quantidade</label>
-              <input type="number" id="param-tab-count" value="4" min="1" max="20" step="1">
-            </div>
-            <div class="input-field">
-              <label for="param-tab-width">Largura (mm)</label>
-              <input type="number" id="param-tab-width" value="5.0" min="1.0" max="30.0" step="0.5">
-            </div>
-            <div class="input-field">
-              <label for="param-tab-height">Espessura (mm)</label>
-              <input type="number" id="param-tab-height" value="1.5" min="0.2" max="10.0" step="0.1">
-            </div>
-          </div>
-        </div>
 
-        <!-- Alívio de Cantos / Dogbone Fillets (REA FreeCAD & VCarve) -->
-        <div class="panel-section">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
-            <h2 style="margin: 0; font-size: 0.95rem;">Alívio de Cantos (Dogbone)</h2>
-            <div class="checkbox-field" style="display: flex; align-items: center; gap: 0.4rem;">
-              <input type="checkbox" id="param-use-dogbone"
-                style="accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;">
-              <label for="param-use-dogbone"
-                style="font-size: 0.8rem; cursor: pointer; color: #38bdf8; font-weight: 600;">Ativar</label>
-            </div>
-          </div>
-          <p style="font-size: 0.75rem; color: #94a3b8; margin: 0 0 0.6rem 0;">
-            Corta alívios nos cantos internos de 90° para que peças retangulares encaixem sem raio cego.
-          </p>
-          <div id="dogbone-settings-grid" class="input-grid"
-            style="opacity: 0.45; pointer-events: none; transition: opacity 0.2s ease;">
-            <div class="input-field" style="grid-column: span 2;">
-              <label for="param-dogbone-type">Estratégia de Alívio</label>
-              <select id="param-dogbone-type">
-                <option value="dogbone" selected>🦴 Dogbone (Bissetriz 45°)</option>
-                <option value="tbone-h">🪵 T-Bone Horizontal (Aresta X)</option>
-                <option value="tbone-v">🪵 T-Bone Vertical (Aresta Y)</option>
+          <div class="panel-section">
+            <h2>Origem do Trabalho (X0 Y0 Z0)</h2>
+            <div class="input-field">
+              <label for="param-origin-type">Alinhamento na Mesa</label>
+              <select id="param-origin-type">
+                <option value="bottom-left" selected>Canto Inferior Esquerdo da Mesa</option>
+                <option value="top-left">Canto Superior Esquerdo da Mesa</option>
+                <option value="top-right">Canto Superior Direito da Mesa</option>
+                <option value="bottom-right">Canto Inferior Direito da Mesa</option>
+                <option value="center">Centro da Mesa</option>
+                <option value="custom">Offset Personalizado (G54)</option>
               </select>
             </div>
-          </div>
-        </div>
-
-        <!-- Entrada em Rampa / Ramp Entry (REA Carbide Create & FreeCAD) -->
-        <div class="panel-section">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
-            <h2 style="margin: 0; font-size: 0.95rem;">Entrada em Rampa (Ramping)</h2>
-            <div class="checkbox-field" style="display: flex; align-items: center; gap: 0.4rem;">
-              <input type="checkbox" id="param-use-ramping"
-                style="accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;">
-              <label for="param-use-ramping"
-                style="font-size: 0.8rem; cursor: pointer; color: #38bdf8; font-weight: 600;">Ativar</label>
-            </div>
-          </div>
-          <p style="font-size: 0.75rem; color: #94a3b8; margin: 0 0 0.6rem 0;">
-            A fresa desce em rampa suave ao longo do percurso, eliminando esforço de mergulho vertical.
-          </p>
-          <div id="ramping-settings-grid" class="input-grid"
-            style="opacity: 0.45; pointer-events: none; transition: opacity 0.2s ease;">
-            <div class="input-field">
-              <label for="param-ramp-angle">Ângulo Rampa (°)</label>
-              <input type="number" id="param-ramp-angle" value="10" min="2" max="45" step="1">
-            </div>
-            <div class="input-field">
-              <label for="param-ramp-max-len">Comprimento Máx (mm)</label>
-              <input type="number" id="param-ramp-max-len" value="30" min="5" max="200" step="5">
+            <div class="input-grid" style="margin-top: 0.4rem;">
+              <div class="input-field">
+                <label for="param-wcs-x">Posição X (mm)</label>
+                <input type="number" id="param-wcs-x" value="0.0" step="5" min="0" max="2000" readonly
+                  style="opacity: 0.6;">
+              </div>
+              <div class="input-field">
+                <label for="param-wcs-y">Posição Y (mm)</label>
+                <input type="number" id="param-wcs-y" value="0.0" step="5" min="0" max="2000" readonly
+                  style="opacity: 0.6;">
+              </div>
             </div>
           </div>
         </div>
 
-        <div class="panel-actions">
-          <button id="btn-generate" class="primary-btn">⚙️ Gerar Trajectória</button>
-          <button id="btn-open-sim3d" class="secondary-btn" title="Ver simulação do corte em 3D">👁️ Ver no Simulador
-            3D</button>
-          <button id="btn-download" class="secondary-btn disabled" disabled>💾 Guardar G-code (.nc)</button>
+        <!-- Conteúdo do Separador 3: Consola G-code -->
+        <div id="sidebar-content-gcode" class="sidebar-tab-content" style="display: none;">
+          <div class="panel-section output-section">
+            <div class="section-header">
+              <h2>Consola & Diagnóstico</h2>
+              <button id="btn-copy" class="tool-btn disabled" disabled title="Copiar código para a área de transferência">
+                📋 Copiar
+              </button>
+            </div>
+
+            <!-- Cartão de Estatísticas e Diagnóstico CAM -->
+            <div id="gcode-stats-card" class="gcode-stats-card" style="display: none;">
+              <div class="stats-row">
+                <div class="stat-badge"><span class="stat-icon">⏱️</span> <strong>Tempo:</strong> <span
+                    id="stat-est-time">--</span></div>
+                <div class="stat-badge"><span class="stat-icon">📏</span> <strong>Z Corte:</strong> <span
+                    id="stat-z-range">--</span></div>
+              </div>
+              <div class="stats-row" style="margin-top: 0.35rem;">
+                <div class="stat-badge"><span class="stat-icon">📐</span> <strong>Dimensões:</strong> <span
+                    id="stat-bbox">--</span></div>
+                <div class="stat-badge"><span class="stat-icon">🛣️</span> <strong>Distância:</strong> <span
+                    id="stat-distance">--</span></div>
+              </div>
+              <div id="gcode-safety-alert" class="safety-badge safe" style="margin-top: 0.45rem;">
+                <span id="gcode-safety-icon">✅</span> <span id="gcode-safety-msg">Percurso validado dentro dos limites da mesa.</span>
+              </div>
+            </div>
+
+            <textarea id="gcode-output" readonly placeholder="O código G-code gerado aparecerá aqui..."></textarea>
+          </div>
         </div>
 
-        <div class="panel-section output-section">
-          <div class="section-header">
-            <h2>Consola G-code</h2>
-            <button id="btn-copy" class="tool-btn disabled" disabled title="Copiar código para a área de transferência">
-              📋 Copiar
-            </button>
+        <!-- Barra de Ações Fixa (Sticky Pinned Footer) -->
+        <div class="sidebar-pinned-actions">
+          <button id="btn-generate" class="primary-btn">⚙️ Gerar Trajetória</button>
+          <div class="action-dual-row">
+            <button id="btn-open-sim3d" class="secondary-btn" title="Ver simulação do corte em 3D">👁️ Simulador 3D</button>
+            <button id="btn-download" class="secondary-btn disabled" disabled title="Guardar ficheiro G-code">💾 Guardar G-code</button>
           </div>
-
-          <!-- Cartão de Estatísticas e Diagnóstico CAM (Fase 1 - Parser Of4W) -->
-          <div id="gcode-stats-card" class="gcode-stats-card" style="display: none;">
-            <div class="stats-row">
-              <div class="stat-badge"><span class="stat-icon">⏱️</span> <strong>Tempo:</strong> <span
-                  id="stat-est-time">--</span></div>
-              <div class="stat-badge"><span class="stat-icon">📏</span> <strong>Z Corte:</strong> <span
-                  id="stat-z-range">--</span></div>
-            </div>
-            <div class="stats-row" style="margin-top: 0.35rem;">
-              <div class="stat-badge"><span class="stat-icon">📐</span> <strong>Dimensões:</strong> <span
-                  id="stat-bbox">--</span></div>
-              <div class="stat-badge"><span class="stat-icon">🛣️</span> <strong>Distância:</strong> <span
-                  id="stat-distance">--</span></div>
-            </div>
-            <div id="gcode-safety-alert" class="safety-badge safe" style="margin-top: 0.45rem;">
-              <span id="gcode-safety-icon">✅</span> <span id="gcode-safety-msg">Percurso validado dentro dos limites da
-                mesa.</span>
-            </div>
-          </div>
-
-          <textarea id="gcode-output" readonly placeholder="O código G-code gerado aparecerá aqui..."></textarea>
         </div>
       </aside>
 
@@ -930,14 +992,14 @@
         <div class="update-header-info">
           <div class="update-tag-row">
             <span class="update-badge">NOVA VERSÃO</span>
-            <span id="update-version-label" class="update-version-text">v0.10.2</span>
+            <span id="update-version-label" class="update-version-text">v0.10.6</span>
           </div>
           <h4 id="update-popup-title" class="update-title">Atualização Disponível!</h4>
         </div>
         <button id="btn-close-update-popup" class="update-close-btn" title="Lembrar mais tarde">✕</button>
       </div>
       <p id="update-popup-desc" class="update-desc">
-        Foi descarregada uma nova versão do Gcoded com motor DXF corrigido (arcos perfeitos sem distorções). Atualiza para carregar as novidades.
+        Foi descarregada uma nova versão do Gcoded com menus e painéis simplificados ao estilo Vectric VCarve (separadores organizados, grelha visual de estratégias e ações fixas).
       </p>
       <div class="update-actions">
         <button id="btn-update-now" class="update-cta-btn">
@@ -963,7 +1025,7 @@
           <div style="flex: 1;">
             <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.2rem;">
               <h3 style="margin: 0; color: #ffffff; font-size: 1.1rem;">Gcoded CAM Offline</h3>
-              <span class="update-badge" style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.4); color: #34d399;">v0.10.2</span>
+              <span class="update-badge" style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.4); color: #34d399;">v0.10.6</span>
             </div>
             <p style="margin: 0; font-size: 0.82rem; color: #94a3b8; line-height: 1.4;">
               A tua aplicação atualiza-se de forma autónoma através do Service Worker, preservando os teus desenhos e definições locais.
@@ -975,12 +1037,32 @@
         <div class="update-changelog-list">
           <div class="changelog-item">
             <div class="changelog-header">
-              <span class="changelog-ver">v0.10.2</span>
+              <span class="changelog-ver">v0.10.6</span>
               <span class="changelog-tag" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">Atual</span>
+            </div>
+            <div class="changelog-title">📐 Menus Ergonómicos Estilo Vectric VCarve</div>
+            <div class="changelog-body">
+              Reorganização completa dos menus da aplicação: barra superior com clusters lógicos (Desenho, Vetores, Ações e Sistema), painel lateral por separadores (Percursos CAM, Mesa & Chapa, Consola G-code), grelha com cartões visuais para estratégias de fresagem e botões de geração fixos no rodapé para máxima agilidade sem scroll.
+            </div>
+          </div>
+
+          <div class="changelog-item">
+            <div class="changelog-header">
+              <span class="changelog-ver">v0.10.5</span>
+            </div>
+            <div class="changelog-title">🗑️ Limpar Tudo Instantâneo e Histórico Ctrl+Z</div>
+            <div class="changelog-body">
+              Correção do botão de limpeza de mesa com resposta instantânea e suporte a Desfazer (Ctrl+Z) e Refazer (Ctrl+Y).
+            </div>
+          </div>
+
+          <div class="changelog-item">
+            <div class="changelog-header">
+              <span class="changelog-ver">v0.10.2</span>
             </div>
             <div class="changelog-title">📐 Descodificação Exata de Polilinhas DXF e Arcos Bulge</div>
             <div class="changelog-body">
-              Revisão completa do leitor DXF nativo: eliminação total de laços, cuspes e arcos invertidos em peças complexas (como árvores de Natal e ornamentos). Cálculo exato de centro/raio de bulges, divisão em quadrantes cúbicos de Bézier e suporte a polilinhas 2D clássicas (POLYLINE/VERTEX).
+              Revisão completa do leitor DXF nativo: eliminação total de laços, cuspes e arcos invertidos em peças complexas.
             </div>
           </div>
 
@@ -990,7 +1072,7 @@
             </div>
             <div class="changelog-title">🛡️ Desfasamento Poligonal Industrial ClipperLib</div>
             <div class="changelog-body">
-              Integração local do motor ClipperLib (algoritmo Vatti): elimina 100% dos laços parasitas em cauda de andorinha (<em>swallowtails</em>) e cusps cruzados em curvas complexas ou estreitas.
+              Integração local do motor ClipperLib (algoritmo Vatti): elimina 100% dos laços parasitas em cauda de andorinha e cusps cruzados.
             </div>
           </div>
 
@@ -1000,17 +1082,7 @@
             </div>
             <div class="changelog-title">🦴 Alívio de Cantos (Dogbone/T-Bone) e Entrada em Rampa</div>
             <div class="changelog-body">
-              Engenharia reversa dos módulos CAM do FreeCAD e Carbide Create Pro: corte de alívios para encaixe de respigas a 90° e descida helicoidal em 3 eixos simultâneos (XYZ) sem esforço de mergulho vertical.
-            </div>
-          </div>
-
-          <div class="changelog-item">
-            <div class="changelog-header">
-              <span class="changelog-ver">v0.9.0</span>
-            </div>
-            <div class="changelog-title">📲 Instalação PWA & Suporte 100% Offline</div>
-            <div class="changelog-body">
-              Suporte completo de instalação em Windows, macOS, Linux, ChromeOS e smartphones com Service Worker e cache stale-while-revalidate.
+              Engenharia reversa dos módulos CAM do FreeCAD e Carbide Create Pro: corte de alívios a 90° e descida helicoidal em 3 eixos simultâneos.
             </div>
           </div>
         </div>
@@ -1029,7 +1101,7 @@
     </div>
   </div>
 
-  <script type="module" src="./src/app.js?v=0.10.2"></script>
+  <script type="module" src="./src/app.js?v=0.10.6"></script>
 </body>
 
 </html>

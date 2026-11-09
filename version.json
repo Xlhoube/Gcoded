@@ -1,14 +1,14 @@
 {
-  "version": "0.10.5",
+  "version": "0.10.6",
   "name": "Gcoded CAM",
-  "build": "20261109-05",
-  "updatedAt": "2026-11-09T07:15:00Z",
+  "build": "20261109-06",
+  "updatedAt": "2026-11-09T07:55:00Z",
   "highlights": [
-    "🗑️ Botão Limpar Tudo Corrigido: Limpeza instantânea, segura e compatível com Desfazer (Ctrl+Z)",
-    "↩️ Histórico Undo / Redo: Atalho global Ctrl+Z para Desfazer e Ctrl+Y / Ctrl+Shift+Z para Refazer (até 50 passos)",
-    "🔘 Botões Dedicados de Desfazer e Refazer na barra de ferramentas superior e no menu de contexto",
-    "🧩 Desagrupar Contornos: Separação de percursos DXF/SVG para edição e atribuição individual de estratégias",
-    "🟩 Desbaste Interior (Pocketing): Limpeza concêntrica de cavidades e aberturas internas",
-    "🟪 Fresa de Chanfro (Chamfer Mill): Suporte a fresas de chanfro 45°/90° e 60° com cálculo exato de profundidade Z e folga de ponta"
+    "📐 Interface Ergonómica Estilo Vectric VCarve: Menus e botões organizados de forma limpa e intuitiva",
+    "🗂️ Painel Lateral por Separadores: Percursos CAM, Mesa & Chapa e Consola G-code",
+    "🎨 Grelha Visual de Estratégias (Vectric Style): Botões com ícones e badges para Exterior (+R), Interior (-R), Pocket, Chanfro e Gravação",
+    "📌 Barra de Ações Fixa (Sticky Footer): Botões 'Gerar Trajetória', 'Simulador 3D' e 'Guardar G-code' sempre visíveis sem scroll",
+    "🛠️ Barra Superior em Clusters Funcionais: Desenho, Vetores & Ficheiros, Ações & Histórico e Sistema",
+    "🗑️ Limpeza de Mesa Instantânea e Histórico Global Ctrl+Z / Ctrl+Y"
   ]
 }
