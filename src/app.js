@@ -4083,7 +4083,7 @@ function offsetContour(points, delta, joinType = 'round') {
           results.push(poly);
         }
       }
-      if (results.length > 0) return results;
+      return results;
     } catch (err) {
       console.warn("[Gcoded CAM] ClipperOffset falhou, a usar fallback geométrico:", err);
     }
@@ -4162,14 +4162,17 @@ function offsetContour(points, delta, joinType = 'round') {
  * Utiliza desfasamento progressivo robusto sem auto-interseções.
  */
 function generatePocketToolpaths(points, toolDia, stepoverPercent = 40) {
-  const toolRadius = toolDia / 2;
-  const step = Math.max(0.1, toolDia * (stepoverPercent / 100));
+  const safeDia = Math.max(0.5, toolDia || 3.175);
+  const toolRadius = safeDia / 2;
+  const clampedStepover = Math.max(5, Math.min(95, stepoverPercent || 40));
+  const step = Math.max(0.2, safeDia * (clampedStepover / 100));
   const toolpaths = [];
 
   let currentOffset = -toolRadius;
   let prevTotalArea = Math.abs(signedArea(points));
 
-  for (let pass = 0; pass < 200; pass++) {
+  // Limite razoável de 80 passagens para proteger a UI de bloqueios
+  for (let pass = 0; pass < 80; pass++) {
     const loops = offsetContour(points, currentOffset);
     if (!loops || loops.length === 0) break;
 
@@ -4467,12 +4470,15 @@ function generateContourWithTabs(points, tabOptions, zVal, depthTotal) {
  * Auxiliar para converter input regional com vírgulas e tratar NaN
  */
 function parseCAMParam(inputElement, defaultValue) {
+  if (!inputElement || inputElement.value === undefined || inputElement.value === null) {
+    return defaultValue;
+  }
   let valStr = inputElement.value.toString().trim();
   valStr = valStr.replace(',', '.');
   let val = parseFloat(valStr);
   if (isNaN(val)) {
     val = defaultValue;
-    inputElement.value = defaultValue;
+    try { inputElement.value = defaultValue; } catch (_) {}
   }
   return val;
 }
@@ -5140,7 +5146,8 @@ function extractSubpathsFromObject(obj, parentGroup, groupMatrix, curStrategy) {
         const totalLength = tempPath.getTotalLength();
         if (totalLength > 0.05) {
           const stepSize = 2; // 1mm em px (ESCALA_MM_PX = 2)
-          const numPoints = Math.max(12, Math.ceil(totalLength / stepSize));
+          // Limitar o número máximo de pontos a 500 para evitar bloqueios do browser com paths gigantes
+          const numPoints = Math.min(500, Math.max(12, Math.ceil(totalLength / stepSize)));
           const pts = [];
           for (let i = 0; i <= numPoints; i++) {
             const dist = (i / numPoints) * totalLength;
@@ -5164,6 +5171,33 @@ function extractSubpathsFromObject(obj, parentGroup, groupMatrix, curStrategy) {
   }
 
   return subpaths;
+}
+
+/**
+ * Calcula de forma garantidamente segura e finita as passagens em Z
+ * Evita bloqueios da thread do browser por passo nulo ou negativo.
+ */
+function calculateSafeZPasses(rawDepthPass, rawTargetDepth) {
+  // Passo de descida estritamente positivo (mínimo 0.05mm, omissão 1.0mm)
+  const parsedPass = parseFloat(rawDepthPass);
+  const stepZ = Math.max(0.05, Math.abs(!isNaN(parsedPass) && parsedPass !== 0 ? parsedPass : 1.0));
+
+  // Profundidade alvo estritamente negativa abaixo de Z=0 (mínimo 0.1mm)
+  const parsedTarget = parseFloat(rawTargetDepth);
+  const targetZ = -Math.abs(!isNaN(parsedTarget) && parsedTarget !== 0 ? parsedTarget : 0.1);
+
+  const zPasses = [];
+  let currentZ = -stepZ;
+  let guard = 0;
+
+  // Limite máximo de segurança de 500 passagens por contorno
+  while (currentZ > targetZ && guard++ < 500) {
+    zPasses.push(Number(currentZ.toFixed(4)));
+    currentZ -= stepZ;
+  }
+  zPasses.push(Number(targetZ.toFixed(4)));
+
+  return zPasses;
 }
 
 /**
@@ -5228,13 +5262,7 @@ function processSubpathToolpath(subItem, itemStrategy, opSettings, gcode, toolpa
     const startX = cxMM - rCut;
     const startY = cyMM;
 
-    const zPasses = [];
-    let currentZ = -depthPass;
-    while (currentZ > targetDepth) {
-      zPasses.push(currentZ);
-      currentZ -= depthPass;
-    }
-    zPasses.push(targetDepth);
+    const zPasses = calculateSafeZPasses(depthPass, targetDepth);
 
     gcode.push(`G0 Z${safeZ.toFixed(3)}`);
     gcode.push(`G0 X${startX.toFixed(3)} Y${startY.toFixed(3)}`);
@@ -5301,13 +5329,7 @@ function processSubpathToolpath(subItem, itemStrategy, opSettings, gcode, toolpa
   });
 
   // Passagens verticais de descida Z
-  const zPasses = [];
-  let currentZ = -depthPass;
-  while (currentZ > targetDepth) {
-    zPasses.push(currentZ);
-    currentZ -= depthPass;
-  }
-  zPasses.push(targetDepth);
+  const zPasses = calculateSafeZPasses(depthPass, targetDepth);
 
   // Executar corte para cada laço gerado
   loopsToCut.forEach((loop) => {
@@ -5386,6 +5408,7 @@ function generateGCode() {
     // Separar objectos de relevo (imagens 3D ou imagens gerais) dos contornos vectoriais
     const reliefObjects = allObjects.filter(obj => obj.isReliefImage || obj.type === 'image');
     const contourObjects = allObjects.filter(obj => !obj.isReliefImage && obj.type !== 'image');
+    const activeOps = (camOperations || []).filter(op => op.enabled);
 
     // Limpar visualizações antigas
     clearVisualToolpaths();
@@ -5431,7 +5454,20 @@ function generateGCode() {
     }
 
     // Validações apenas para contornos (não se aplicam ao relevo)
-    if (contourObjects.length > 0) {
+    if (activeOps.length > 0) {
+      // Validar cada ordem de trabalho ativa
+      for (const op of activeOps) {
+        const opDepth = (op.params && op.params.depthTotal !== undefined) ? op.params.depthTotal : -3.0;
+        if (Math.abs(opDepth) > materialZ) {
+          const errMsg = `❌ ERRO DE SEGURANÇA:\nA profundidade da ordem "${op.name}" (${Math.abs(opDepth)} mm) excede a espessura do material (${materialZ} mm).\nAjusta a profundidade da ordem ou a espessura para evitar colisão na mesa.`;
+          gcodeOutputText.value = errMsg;
+          gcodeOutputText.style.color = "var(--danger)";
+          alert(errMsg);
+          if (btnGenerate) { btnGenerate.innerText = "⚙️ Gerar Trajectória"; btnGenerate.style.opacity = ""; }
+          return;
+        }
+      }
+    } else if (contourObjects.length > 0) {
       if (depthTotal >= 0) {
         alert("A profundidade total tem de ser um valor negativo (abaixo da superfície de corte)!");
         if (btnGenerate) { btnGenerate.innerText = "⚙️ Gerar Trajectória"; btnGenerate.style.opacity = ""; }
@@ -5631,8 +5667,6 @@ function generateGCode() {
     }
 
     // 4B. PROCESSAR GEOMETRIA DE CONTORNOS (Multi-Operação com Ordens de Trabalho ou Modo Direto)
-    const activeOps = camOperations.filter(op => op.enabled);
-
     if (activeOps.length > 0) {
       // === MODO CAM MULTI-OPERAÇÃO (ORDENS DE TRABALHO) ===
       let lastToolName = null;
@@ -5769,10 +5803,14 @@ function generateGCode() {
         };
 
         contourItems.forEach(item => {
-          const subpaths = extractSubpathsFromObject(item.obj, item.parentGroup, item.groupMatrix, opStrategy);
-          subpaths.forEach(subItem => {
-            processSubpathToolpath(subItem, opStrategy, opSettings, gcode, toolpathsToVisualise);
-          });
+          try {
+            const subpaths = extractSubpathsFromObject(item.obj, item.parentGroup, item.groupMatrix, opStrategy);
+            subpaths.forEach(subItem => {
+              processSubpathToolpath(subItem, opStrategy, opSettings, gcode, toolpathsToVisualise);
+            });
+          } catch (errItem) {
+            console.warn("[Gcoded CAM] Falha no processamento de contorno da ordem:", errItem);
+          }
         });
       });
     } else if (contourObjects.length > 0) {
@@ -5880,10 +5918,14 @@ function generateGCode() {
           toolpathColor: getStrategyColor(curStrat)
         };
 
-        const subpaths = extractSubpathsFromObject(item.obj, item.parentGroup, item.groupMatrix, curStrat);
-        subpaths.forEach(subItem => {
-          processSubpathToolpath(subItem, curStrat, opSettings, gcode, toolpathsToVisualise);
-        });
+        try {
+          const subpaths = extractSubpathsFromObject(item.obj, item.parentGroup, item.groupMatrix, curStrat);
+          subpaths.forEach(subItem => {
+            processSubpathToolpath(subItem, curStrat, opSettings, gcode, toolpathsToVisualise);
+          });
+        } catch (errItem) {
+          console.warn("[Gcoded CAM] Falha no processamento de contorno direto:", errItem);
+        }
       });
     }
 
@@ -5960,7 +6002,7 @@ function generateGCode() {
     }
   } catch (err) {
     console.error("Erro na geração do G-code:", err);
-    alert("Ocorreu um erro ao gerar o G-code. Por favor, verifica se todos os parâmetros numéricos estão corretos.");
+    alert("Ocorreu um erro ao gerar o G-code: " + (err && err.message ? err.message : "Por favor, verifica se os parâmetros numéricos estão corretos."));
     if (btnGenerate) {
       btnGenerate.innerText = "⚙️ Gerar Trajectória";
       btnGenerate.style.opacity = "";
