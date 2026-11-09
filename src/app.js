@@ -2508,9 +2508,67 @@ function clearVisualToolpaths() {
  * Inspirado e adaptado da engenharia de dxfImport.ts do Layerling
  */
 class DxfReader {
+  /**
+   * Converte um segmento em arco definido por Bulge do DXF num ou mais segmentos cúbicos de Bézier
+   * b = tan(theta / 4)
+   * Garante continuidade C1, curvatura precisa e ausência de cuspes invertidos.
+   */
+  static arcPiecesFromBulge(p1, p2, b) {
+    if (Math.abs(b) < 1e-6) {
+      return [{ start: { x: p1.x, y: p1.y }, end: { x: p2.x, y: p2.y } }];
+    }
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const chord = Math.hypot(dx, dy);
+    if (chord < 1e-6) return [];
+
+    const r = (chord * (1 + b * b)) / (4 * Math.abs(b));
+    const mx = (p1.x + p2.x) / 2;
+    const my = (p1.y + p2.y) / 2;
+    const factor = (1 - b * b) / (4 * b);
+    const cx = mx - dy * factor;
+    const cy = my + dx * factor;
+
+    const a1 = Math.atan2(p1.y - cy, p1.x - cx);
+    let a2 = Math.atan2(p2.y - cy, p2.x - cx);
+
+    if (b > 0) {
+      while (a2 <= a1) a2 += 2 * Math.PI;
+    } else {
+      while (a2 >= a1) a2 -= 2 * Math.PI;
+    }
+
+    const sweep = a2 - a1;
+    const numSegments = Math.max(1, Math.ceil(Math.abs(sweep) / (Math.PI / 2)));
+    const stepAngle = sweep / numSegments;
+    const pieces = [];
+
+    for (let i = 0; i < numSegments; i++) {
+      const startAngle = a1 + i * stepAngle;
+      const endAngle = startAngle + stepAngle;
+      const segSweep = endAngle - startAngle;
+
+      const sp = i === 0 ? { x: p1.x, y: p1.y } : { x: cx + r * Math.cos(startAngle), y: cy + r * Math.sin(startAngle) };
+      const ep = (i === numSegments - 1) ? { x: p2.x, y: p2.y } : { x: cx + r * Math.cos(endAngle), y: cy + r * Math.sin(endAngle) };
+
+      const dir = segSweep > 0 ? 1 : -1;
+      const t1 = { x: -dir * Math.sin(startAngle), y: dir * Math.cos(startAngle) };
+      const t2 = { x: -dir * Math.sin(endAngle), y: dir * Math.cos(endAngle) };
+
+      const k = (4 / 3) * Math.tan(Math.abs(segSweep) / 4) * r;
+      pieces.push({
+        start: sp,
+        c1: { x: sp.x + t1.x * k, y: sp.y + t1.y * k },
+        c2: { x: ep.x - t2.x * k, y: ep.y - t2.y * k },
+        end: ep
+      });
+    }
+    return pieces;
+  }
+
   static parseToSvgPaths(dxfText, options = {}) {
     const scaleMmPx = options.scaleMmPx ?? ESCALA_MM_PX;
-    const tolerance = options.tolerance ?? 0.05;
+    const tolerance = options.tolerance ?? 0.1;
 
     const lines = dxfText.split(/\r?\n/);
     let inHeader = false;
@@ -2547,10 +2605,9 @@ class DxfReader {
       if (inEntities) {
         if (code === 0) {
           if (currentEntity) rawEntities.push(currentEntity);
-          currentEntity = { type: val, codes: {} };
+          currentEntity = { type: val, tags: [] };
         } else if (currentEntity) {
-          if (!currentEntity.codes[code]) currentEntity.codes[code] = [];
-          currentEntity.codes[code].push(val);
+          currentEntity.tags.push({ code, val });
         }
       }
     }
@@ -2559,10 +2616,15 @@ class DxfReader {
     const pieces = [];
     const closedLoops = [];
 
-    const getNum = (ent, c, def = 0) => parseFloat(ent.codes[c]?.[0] || def);
-    const getAll = (ent, c) => (ent.codes[c] || []).map(v => parseFloat(v));
+    const getTag = (ent, c) => ent.tags.find(t => t.code === c)?.val;
+    const getNum = (ent, c, def = 0) => {
+      const val = getTag(ent, c);
+      return val !== undefined ? parseFloat(val) : def;
+    };
 
-    for (const ent of rawEntities) {
+    for (let eIdx = 0; eIdx < rawEntities.length; eIdx++) {
+      const ent = rawEntities[eIdx];
+
       switch (ent.type) {
         case "LINE": {
           const x1 = getNum(ent, 10);
@@ -2608,8 +2670,7 @@ class DxfReader {
           for (let s = 0; s < steps; s++) {
             const a1 = startRad + s * stepAngle;
             const a2 = a1 + stepAngle;
-            const halfDiff = (a2 - a1) / 2;
-            const k = (4 / 3) * Math.tan(halfDiff / 2) * r;
+            const k = (4 / 3) * Math.tan((a2 - a1) / 4) * r;
 
             const p1 = { x: cx + r * Math.cos(a1), y: cy + r * Math.sin(a1) };
             const p2 = { x: cx + r * Math.cos(a2), y: cy + r * Math.sin(a2) };
@@ -2628,47 +2689,149 @@ class DxfReader {
         }
 
         case "LWPOLYLINE": {
-          const xs = getAll(ent, 10);
-          const ys = getAll(ent, 20);
-          const bulges = getAll(ent, 42);
-          const flags = parseInt(ent.codes[70]?.[0] || 0, 10);
-          const closed = (flags & 1) === 1;
+          let flags = 0;
+          const vertices = [];
+          let curV = null;
 
-          if (xs.length > 0) {
-            const count = closed ? xs.length : xs.length - 1;
+          for (const { code, val } of ent.tags) {
+            if (code === 70) {
+              flags = parseInt(val, 10);
+            } else if (code === 10) {
+              if (curV) vertices.push(curV);
+              curV = { x: parseFloat(val), y: 0, bulge: 0 };
+            } else if (code === 20 && curV) {
+              curV.y = parseFloat(val);
+            } else if (code === 42 && curV) {
+              curV.bulge = parseFloat(val);
+            }
+          }
+          if (curV) vertices.push(curV);
+
+          const closed = (flags & 1) === 1;
+          if (vertices.length > 1) {
+            const count = closed ? vertices.length : vertices.length - 1;
             const polyPieces = [];
             for (let i = 0; i < count; i++) {
-              const next = (i + 1) % xs.length;
-              const p1 = { x: xs[i], y: ys[i] };
-              const p2 = { x: xs[next], y: ys[next] };
-              const b = bulges[i] || 0;
-
-              if (Math.abs(b) < 1e-6) {
-                polyPieces.push({ start: p1, end: p2 });
-              } else {
-                const theta = 4 * Math.atan(b);
-                const chord = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-                const r = Math.abs(chord / (2 * Math.sin(theta / 2)));
-                const halfTheta = theta / 2;
-                const k = (4 / 3) * Math.tan(halfTheta / 2) * r;
-                const chordAngle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-                const alpha = (Math.PI - Math.abs(theta)) / 2;
-                const sign = b > 0 ? 1 : -1;
-                const t1Angle = chordAngle + sign * alpha;
-                const t2Angle = chordAngle + Math.PI - sign * alpha;
-
-                polyPieces.push({
-                  start: p1,
-                  c1: { x: p1.x + Math.cos(t1Angle) * k, y: p1.y + Math.sin(t1Angle) * k },
-                  c2: { x: p2.x + Math.cos(t2Angle) * k, y: p2.y + Math.sin(t2Angle) * k },
-                  end: p2
-                });
-              }
+              const next = (i + 1) % vertices.length;
+              const p1 = vertices[i];
+              const p2 = vertices[next];
+              const b = p1.bulge || 0;
+              polyPieces.push(...this.arcPiecesFromBulge(p1, p2, b));
             }
             if (closed) {
               closedLoops.push(polyPieces);
             } else {
               pieces.push(...polyPieces);
+            }
+          }
+          break;
+        }
+
+        case "POLYLINE": {
+          const flags = getNum(ent, 70, 0);
+          const closed = (flags & 1) === 1;
+          const vertices = [];
+
+          while (eIdx + 1 < rawEntities.length && rawEntities[eIdx + 1].type === "VERTEX") {
+            eIdx++;
+            const vEnt = rawEntities[eIdx];
+            const vx = getNum(vEnt, 10, 0);
+            const vy = getNum(vEnt, 20, 0);
+            const vb = getNum(vEnt, 42, 0);
+            vertices.push({ x: vx, y: vy, bulge: vb });
+          }
+          if (eIdx + 1 < rawEntities.length && rawEntities[eIdx + 1].type === "SEQEND") {
+            eIdx++;
+          }
+
+          if (vertices.length > 1) {
+            const count = closed ? vertices.length : vertices.length - 1;
+            const polyPieces = [];
+            for (let i = 0; i < count; i++) {
+              const next = (i + 1) % vertices.length;
+              const p1 = vertices[i];
+              const p2 = vertices[next];
+              const b = p1.bulge || 0;
+              polyPieces.push(...this.arcPiecesFromBulge(p1, p2, b));
+            }
+            if (closed) {
+              closedLoops.push(polyPieces);
+            } else {
+              pieces.push(...polyPieces);
+            }
+          }
+          break;
+        }
+
+        case "ELLIPSE": {
+          const cx = getNum(ent, 10, 0);
+          const cy = getNum(ent, 20, 0);
+          const mx = getNum(ent, 11, 0);
+          const my = getNum(ent, 21, 0);
+          const ratio = getNum(ent, 40, 1);
+          const startParam = getNum(ent, 41, 0);
+          const endParam = getNum(ent, 42, 2 * Math.PI);
+
+          const majorLen = Math.hypot(mx, my);
+          const majorAngle = Math.atan2(my, mx);
+          const minorLen = majorLen * ratio;
+
+          let sParam = startParam;
+          let eParam = endParam;
+          while (eParam <= sParam) eParam += 2 * Math.PI;
+          const isClosed = Math.abs(eParam - sParam - 2 * Math.PI) < 1e-4;
+          const steps = Math.max(16, Math.ceil((eParam - sParam) / (Math.PI / 18)));
+          const step = (eParam - sParam) / steps;
+          const ellPieces = [];
+
+          const getEllPt = (t) => {
+            const ex = majorLen * Math.cos(t);
+            const ey = minorLen * Math.sin(t);
+            return {
+              x: cx + ex * Math.cos(majorAngle) - ey * Math.sin(majorAngle),
+              y: cy + ex * Math.sin(majorAngle) + ey * Math.cos(majorAngle)
+            };
+          };
+
+          for (let s = 0; s < steps; s++) {
+            const p1 = getEllPt(sParam + s * step);
+            const p2 = getEllPt(sParam + (s + 1) * step);
+            ellPieces.push({ start: p1, end: p2 });
+          }
+
+          if (isClosed) {
+            closedLoops.push(ellPieces);
+          } else {
+            pieces.push(...ellPieces);
+          }
+          break;
+        }
+
+        case "SPLINE": {
+          const ctrlPts = [];
+          let curPt = null;
+          for (const { code, val } of ent.tags) {
+            if (code === 10) {
+              if (curPt) ctrlPts.push(curPt);
+              curPt = { x: parseFloat(val), y: 0 };
+            } else if (code === 20 && curPt) {
+              curPt.y = parseFloat(val);
+            }
+          }
+          if (curPt) ctrlPts.push(curPt);
+
+          const flags = getNum(ent, 70, 0);
+          const closed = (flags & 1) === 1;
+          if (ctrlPts.length >= 2) {
+            const splinePieces = [];
+            for (let i = 0; i < ctrlPts.length - 1; i++) {
+              splinePieces.push({ start: ctrlPts[i], end: ctrlPts[i + 1] });
+            }
+            if (closed && ctrlPts.length > 2) {
+              splinePieces.push({ start: ctrlPts[ctrlPts.length - 1], end: ctrlPts[0] });
+              closedLoops.push(splinePieces);
+            } else {
+              pieces.push(...splinePieces);
             }
           }
           break;
@@ -2788,8 +2951,46 @@ class DxfReader {
         }
       }
 
+      // Expansão bi-direcional para trás se não fechou
+      const head = currentRun[0].start;
       const tail = currentRun[currentRun.length - 1].end;
-      if (currentRun.length > 1 && dist(tail, currentRun[0].start) <= tolerance) {
+      if (!(currentRun.length > 1 && dist(tail, head) <= tolerance)) {
+        let expandedBack = true;
+        while (expandedBack) {
+          expandedBack = false;
+          const curHead = currentRun[0].start;
+          let bestIdx = -1;
+          let bestDist = tolerance;
+          let mustReverse = false;
+
+          for (let j = 0; j < pool.length; j++) {
+            if (used[j]) continue;
+            const dEnd = dist(curHead, pool[j].end);
+            const dStart = dist(curHead, pool[j].start);
+            if (dEnd <= bestDist) {
+              bestDist = dEnd;
+              bestIdx = j;
+              mustReverse = false;
+            } else if (dStart <= bestDist) {
+              bestDist = dStart;
+              bestIdx = j;
+              mustReverse = true;
+            }
+          }
+
+          if (bestIdx !== -1) {
+            used[bestIdx] = true;
+            const prevPiece = mustReverse ? reverse(pool[bestIdx]) : pool[bestIdx];
+            currentRun.unshift(prevPiece);
+            expandedBack = true;
+          }
+        }
+      }
+
+      const finalHead = currentRun[0].start;
+      const finalTail = currentRun[currentRun.length - 1].end;
+      if (currentRun.length > 1 && dist(finalTail, finalHead) <= tolerance) {
+        currentRun[currentRun.length - 1].end = { x: finalHead.x, y: finalHead.y };
         loops.push(currentRun);
       } else {
         open.push(currentRun);
@@ -5451,7 +5652,7 @@ function setupPWAInstall() {
 /**
  * Gestão de Atualizações PWA (Update Popup & Service Worker Lifecycle)
  */
-const CURRENT_APP_VERSION = '0.10.1';
+const CURRENT_APP_VERSION = '0.10.2';
 let waitingServiceWorker = null;
 let updatePopupEl = null;
 let updateModalEl = null;
@@ -5461,7 +5662,7 @@ let btnVersionBadgeEl = null;
  * Exibe o Popup Flutuante de Atualização Disponível
  * Suporta tanto o modo de notificação de nova versão ativa como o modo de atualização pendente do SW
  */
-function showUpdatePopup(versionStr = 'v0.10.1', options = {}) {
+function showUpdatePopup(versionStr = 'v0.10.2', options = {}) {
   if (!updatePopupEl) updatePopupEl = document.getElementById('update-popup');
   if (btnVersionBadgeEl) btnVersionBadgeEl.classList.add('update-ready');
 
@@ -5474,9 +5675,9 @@ function showUpdatePopup(versionStr = 'v0.10.1', options = {}) {
 
   if (options.isNewVersionNotice) {
     if (titleEl) titleEl.textContent = options.title || `🎉 Versão ${versionStr} Ativa!`;
-    if (descEl) descEl.textContent = options.desc || 'O Gcoded foi atualizado com o motor industrial ClipperLib (sem laços nem auto-interseções) e alívios Dogbone.';
+    if (descEl) descEl.textContent = options.desc || 'O Gcoded foi atualizado com motor DXF de alta precisão (sem distorções em arcos/bulges) e ClipperLib 2D.';
     if (btnNow) {
-      btnNow.innerHTML = '<span>👍 Explorar v0.10.1</span>';
+      btnNow.innerHTML = '<span>👍 Explorar v0.10.2</span>';
       btnNow.onclick = () => {
         localStorage.setItem('gcoded_viewed_version', CURRENT_APP_VERSION);
         hideUpdatePopup();
@@ -5612,7 +5813,7 @@ function registerServiceWorker() {
         title: waitingServiceWorker ? '🚀 Atualização Pronta!' : `✨ Gcoded CAM v${CURRENT_APP_VERSION}`,
         desc: waitingServiceWorker 
           ? 'Foi descarregada uma nova versão. Clica para atualizar e recarregar.' 
-          : 'Estás a usar a versão mais recente com motor ClipperLib 2D, alívios Dogbone/T-Bone e suporte PWA offline.'
+          : 'Estás a usar a versão mais recente com motor DXF corrigido (arcos perfeitos), ClipperLib 2D e suporte PWA offline.'
       });
     });
   }
@@ -5668,14 +5869,14 @@ function registerServiceWorker() {
   window.showUpdatePopup = showUpdatePopup;
   window.openUpdateModal = openUpdateModal;
 
-  // Auto-exibir popup de novidades da versão se o utilizador ainda não visualizou esta versão v0.10.1
+  // Auto-exibir popup de novidades da versão se o utilizador ainda não visualizou esta versão v0.10.2
   setTimeout(() => {
     const lastSeenVer = localStorage.getItem('gcoded_viewed_version');
     if (lastSeenVer !== CURRENT_APP_VERSION) {
       showUpdatePopup(`v${CURRENT_APP_VERSION}`, {
         isNewVersionNotice: true,
-        title: '🎉 Bem-vindo ao Gcoded v0.10.1!',
-        desc: 'Atualizado com motor ClipperLib (zero laços ou auto-interseções), alívios de cantos Dogbone/T-Bone e Ramping suave.'
+        title: '🎉 Bem-vindo ao Gcoded v0.10.2!',
+        desc: 'Motor DXF corrigido com descodificação exata de arcos e bulges (zero inversões), além de ClipperLib e Dogbone.'
       });
     }
   }, 800);

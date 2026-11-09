@@ -165,6 +165,20 @@
     4. Atualizado o ciclo de vida do Service Worker (`sw.js`): removido o `skipWaiting` imediato no evento `install`, aguardando a instrução do utilizador via `postMessage({ action: 'skipWaiting' })`, com reload automático em `controllerchange`.
     5. Exposta a função `window.showUpdatePopup()` no âmbito global para pré-visualização e testes rápidos.
 
+- **[2026-11-09] | DECISÃO-028 | Descodificação Matemática Exata de Polilinhas DXF e Arcos Bulge (v0.10.2)**
+  - **Contexto:** Na importação de ficheiros CAD DXF (como o pinheiro de Natal com cavidades internas e cantos arredondados das imagens fornecidas pelo utilizador), os arcos das polilinhas apareciam completamente distorcidos, invertidos sobre si próprios em formato de cuspes (pontas agudas) e orelhas circulares gigantes que atravessavam a peça.
+  - **Causa Raiz Identificada:**
+    1. Desacoplamento de índices de vértices e bulges: no formato DXF `LWPOLYLINE`, o código de grupo 42 (bulge) é opcional e apenas emitido para vértices com curvatura. O parser anterior lia `codes[42]` num array plano, associando os bulges aos vértices errados (desfasamento de índice).
+    2. Erro trigonométrico grave no cálculo dos pontos de controlo Bézier: o código anterior calculava o ângulo relativo pela fórmula complementar `(Math.PI - abs(theta))/2` em vez de deflectir na direção tangente exata de $4 \arctan(b)$. Para arcos de $30^\circ$, isso desviava a tangente em $75^\circ$ em vez de $15^\circ$, fazendo os vetores de controlo $c_1$ e $c_2$ apontarem para trás e cruzarem-se, gerando nós e auto-interseções grotescas.
+    3. Inexistência de suporte para polilinhas 2D clássicas `POLYLINE` acompanhadas de nós `VERTEX` e `SEQEND`.
+  - **Decisão:**
+    1. Reconstruído o parser `DxfReader` para leitura sequencial de tags `{ code, val }`, garantindo emparelhamento atómico 100% rigoroso de coordenadas $(x, y)$ com o seu respetivo fator de curvatura `bulge` (código 42).
+    2. Desenvolvido o método `arcPiecesFromBulge(p1, p2, b)` com cálculo analítico exato do centro do círculo $(cx, cy)$, raio $r$ e ângulos de varrimento inicial e final ($a_1, a_2$).
+    3. Decomposição de arcos com $|\theta| > \pi/2$ em quadrantes cúbicos de Bézier ideais com $k = \frac{4}{3} \tan(|\Delta\theta| / 4) r$ e vetores tangenciais normalizados ao longo do sentido de rotação.
+    4. Adicionado suporte completo para polilinhas clássicas `POLYLINE` + `VERTEX` e entidades `ELLIPSE` / `SPLINE`.
+    5. Otimizada a costura de contornos (`stitchPieces`) com expansão bi-direcional (para a frente e para trás), assegurando o fecho perfeito de contornos recortados e tolerância configurável (0.1 mm).
+    6. Atualizada a versão para `v0.10.2` em `version.json`, `sw.js`, `index.html` e `src/app.js`.
+
 ---
 
 ## 🔧 Estado do Projecto (Open Issues & TODO)
@@ -198,5 +212,7 @@
 - [x] Engenharia Reversa CAM (FreeCAD / Carbide / VCarve): Alívio de Cantos (Dogbone/T-Bone) e Entrada em Rampa (v0.10.0)
 - [x] Desfasamento Poligonal Industrial ClipperLib (Eliminação Total de Laços/Swallowtails) (v0.10.1)
 - [x] Popup e Notificação de Atualização PWA com Changelog e Verificação Manual (DECISÃO-027)
+- [x] Motor de Descodificação DXF Nativo de Alta Precisão (Correção de Arcos/Bulges e Polilinhas) (DECISÃO-028 - v0.10.2)
+
 
 

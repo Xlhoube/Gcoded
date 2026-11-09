@@ -1,12 +1,14 @@
 {
-  "version": "0.10.1",
+  "version": "0.10.2",
   "name": "Gcoded CAM",
-  "build": "20261109-01",
-  "updatedAt": "2026-11-09T04:30:00Z",
+  "build": "20261109-02",
+  "updatedAt": "2026-11-09T06:30:00Z",
   "highlights": [
-    "🛡️ ClipperLib 2D: Eliminação total de laços e auto-interseções (swallowtails) em curvas CNC",
+    "📐 Importador DXF Corrigido: Descodificação exata de arcos e bulges em polilinhas CAD (sem cuspes nem laços invertidos)",
+    "🛡️ ClipperLib 2D: Eliminação total de auto-interseções e laços em caminhos de corte CNC",
     "🦴 Alívio de Cantos: Dogbone 45°, T-Bone Horizontal e T-Bone Vertical para marcenaria",
     "📐 Entrada em Rampa: Descida inclinada contínua XYZ com sobreposição de limpeza plana",
     "📲 Suporte PWA: Instalação no computador ou smartphone com funcionamento 100% offline"
   ]
 }
+
