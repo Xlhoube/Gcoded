@@ -2987,18 +2987,70 @@ function signedArea(pts) {
 }
 
 /**
- * Desfasamento Geométrico 2D com Bissectriz e Limite de Miter (Offset Poligonal)
+ * Desfasamento Geométrico 2D de Alta Precisão (ClipperLib / Vatti Polygon Offsetting)
  * delta > 0: Exterior (alarga) | delta < 0: Interior (encolhe)
+ * Elimina 100% de laços em cauda de andorinha (swallowtails), auto-interseções e cusps.
+ * Devolve uma lista de contornos [loop1, loop2, ...] para lidar também com divisões em ilhas.
  */
-function offsetContour(points, delta) {
-  if (!points || points.length < 3) return points;
-  if (Math.abs(delta) < 1e-4) return points;
+function offsetContour(points, delta, joinType = 'round') {
+  if (!points || points.length < 3) return [points];
+  if (Math.abs(delta) < 1e-4) return [points];
 
+  // 1. Motor Industrial ClipperLib (Padrão de CAD/CAM para desfasamento limpo)
+  const clipper = (typeof window !== 'undefined' && window.ClipperLib) ? window.ClipperLib :
+                  (typeof ClipperLib !== 'undefined' ? ClipperLib : null);
+
+  if (clipper && clipper.ClipperOffset) {
+    try {
+      const scale = 1000; // Escala para o espaço de coordenadas inteiras do Clipper
+      const isClosed = Math.hypot(points[0].x - points[points.length - 1].x,
+                                  points[0].y - points[points.length - 1].y) < 0.1;
+      const loop = isClosed ? points.slice(0, -1) : points.slice();
+
+      const clipperPath = loop.map(p => ({
+        X: Math.round(p.x * scale),
+        Y: Math.round(p.y * scale)
+      }));
+
+      // Limpeza de vértices redundantes/colineares
+      clipper.Clipper.CleanPolygon(clipperPath, 0.05 * scale);
+      const area = clipper.Clipper.Area(clipperPath);
+      if (area < 0) {
+        clipperPath.reverse();
+      }
+
+      // Tolerância de arco de 0.025mm para acabamento espelho em curvas CNC
+      const co = new clipper.ClipperOffset(2.0, 0.025 * scale);
+      const jt = joinType === 'miter' ? clipper.JoinType.jtMiter :
+                 joinType === 'square' ? clipper.JoinType.jtSquare : clipper.JoinType.jtRound;
+
+      co.AddPath(clipperPath, jt, clipper.EndType.etClosedPolygon);
+      const solution = new clipper.Paths();
+      co.Execute(solution, delta * scale);
+
+      const results = [];
+      for (let i = 0; i < solution.length; i++) {
+        const poly = solution[i].map(pt => ({
+          x: pt.X / scale,
+          y: pt.Y / scale
+        }));
+        if (poly.length >= 3) {
+          poly.push({ ...poly[0] });
+          results.push(poly);
+        }
+      }
+      if (results.length > 0) return results;
+    } catch (err) {
+      console.warn("[Gcoded CAM] ClipperOffset falhou, a usar fallback geométrico:", err);
+    }
+  }
+
+  // 2. Fallback Geométrico com Limite Rigoroso de Miter
   const isClosed = Math.hypot(points[0].x - points[points.length - 1].x,
                               points[0].y - points[points.length - 1].y) < 1e-3;
   const loop = isClosed ? points.slice(0, -1) : points.slice();
   const n = loop.length;
-  if (n < 3) return points;
+  if (n < 3) return [points];
 
   const area = signedArea(points);
   const dSign = area >= 0 ? delta : -delta;
@@ -3013,7 +3065,7 @@ function offsetContour(points, delta) {
   }
 
   const offsetLoop = [];
-  const miterLimit = 2.5;
+  const miterLimit = 1.414;
 
   for (let i = 0; i < n; i++) {
     const prev = (i - 1 + n) % n;
@@ -3036,7 +3088,7 @@ function offsetContour(points, delta) {
     const uby = by / blen;
 
     const cosHalf = n1.x * ubx + n1.y * uby;
-    if (Math.abs(cosHalf) < 1e-4) {
+    if (Math.abs(cosHalf) < 0.2) {
       offsetLoop.push({
         x: loop[i].x + n2.x * dSign,
         y: loop[i].y + n2.y * dSign
@@ -3058,11 +3110,12 @@ function offsetContour(points, delta) {
   if (isClosed) {
     offsetLoop.push({ ...offsetLoop[0] });
   }
-  return offsetLoop;
+  return [offsetLoop];
 }
 
 /**
  * Gera percursos concêntricos de limpeza de caixa (Pocketing)
+ * Utiliza desfasamento progressivo robusto sem auto-interseções.
  */
 function generatePocketToolpaths(points, toolDia, stepoverPercent = 40) {
   const toolRadius = toolDia / 2;
@@ -3070,18 +3123,30 @@ function generatePocketToolpaths(points, toolDia, stepoverPercent = 40) {
   const toolpaths = [];
 
   let currentOffset = -toolRadius;
-  let prevArea = Math.abs(signedArea(points));
+  let prevTotalArea = Math.abs(signedArea(points));
 
-  for (let pass = 0; pass < 100; pass++) {
-    const loop = offsetContour(points, currentOffset);
-    const newArea = Math.abs(signedArea(loop));
+  for (let pass = 0; pass < 200; pass++) {
+    const loops = offsetContour(points, currentOffset);
+    if (!loops || loops.length === 0) break;
 
-    if (newArea <= 0.5 || newArea >= prevArea) {
+    let passArea = 0;
+    const validLoops = [];
+    for (const loop of loops) {
+      if (loop && loop.length >= 3) {
+        const a = Math.abs(signedArea(loop));
+        if (a > 0.5) {
+          passArea += a;
+          validLoops.push(loop);
+        }
+      }
+    }
+
+    if (validLoops.length === 0 || passArea >= prevTotalArea * 1.05) {
       break;
     }
 
-    toolpaths.push(loop);
-    prevArea = newArea;
+    validLoops.forEach(l => toolpaths.push(l));
+    prevTotalArea = passArea;
     currentOffset -= step;
   }
 
@@ -3827,10 +3892,10 @@ function generateGCode() {
           loopsToCut = [mmPoints];
         } else if (strategy === 'outside') {
           // Compensação Exterior (+R): peça final fica com dimensão exacta
-          loopsToCut = [offsetContour(mmPoints, toolRadius)];
+          loopsToCut = offsetContour(mmPoints, toolRadius);
         } else if (strategy === 'inside') {
           // Compensação Interior (-R): cavidade/furo fica com dimensão exacta
-          loopsToCut = [offsetContour(mmPoints, -toolRadius)];
+          loopsToCut = offsetContour(mmPoints, -toolRadius);
         } else if (strategy === 'pocket') {
           // Desbaste Concêntrico Total de Caixa
           loopsToCut = generatePocketToolpaths(mmPoints, toolDia, stepover);

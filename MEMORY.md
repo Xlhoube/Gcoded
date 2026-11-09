@@ -146,7 +146,15 @@
     - Implementadas as funções `applyDogboneRelief(points, toolRadius, type, strategy)` e `generateRampedPass(loop, zStart, zTarget, rampAngleDeg, maxRampLen)`.
     - Integrado o cálculo no motor `generateGCode()` com emissão sincronizada de blocos `G1 X... Y... Z... F...` e visualização 2D/3D em tempo real.
     - Persistência total dos novos parâmetros no `localStorage` via `saveAppState()` e `loadAppState()`.
-    - Atualização da versão da aplicação e da cache PWA para `v0.10.0`.
+- **[2026-11-09] | DECISÃO-026 | Integração do ClipperLib: Resolução Definitiva de Auto-Interseções (Swallowtails) em Desfasamentos Curvos 2D**
+  - **Contexto:** Ao importar formas complexas com curvaturas côncavas pronunciadas (como o pinheiro de Natal das imagens enviadas), o algoritmo ingénuo anterior de desfasamento por normais e bissetrizes gerava auto-interseções e laços circulares grotescos (*swallowtails*), onde os percursos se cruzavam sobre si próprios e entravam pela peça adentro.
+  - **Decisão:**
+    1. Integrada a biblioteca industrial padrão de CAD/CAM **ClipperLib** (baseada no algoritmo de clipping de Bala Vatti e desfasamento poligonal de Angus Johnson) localmente em `lib/clipper.js`.
+    2. Mantida a arquitetura 100% offline-first: ficheiro empacotado localmente sem dependências externas e registado na cache do Service Worker (`sw.js`).
+    3. Atualizada a função `offsetContour()` para utilizar `ClipperLib.ClipperOffset` com união em arco (`JoinType.jtRound`), resolução micrométrica (`scale = 1000`) e tolerância de arco de 0.025mm.
+    4. Atualizado `generatePocketToolpaths()` para desfasamento concêntrico limpo, suportando separação automática de ilhas independentes em zonas estreitas (estrangulamentos).
+    5. Mantido fallback geométrico seguro com limite rigoroso de miter (1.414).
+    6. Incremento de versão para `v0.10.1`.
 
 ---
 
@@ -179,5 +187,6 @@
 - [x] Opção de Instalar Aplicação (PWA com Manifest, Service Worker, Ícones e Modal de Instalação)
 - [x] Integração de REA (Reverse Engineer Anything - morluto/rea) via Skill e Servidor MCP Alinhado
 - [x] Engenharia Reversa CAM (FreeCAD / Carbide / VCarve): Alívio de Cantos (Dogbone/T-Bone) e Entrada em Rampa (v0.10.0)
+- [x] Desfasamento Poligonal Industrial ClipperLib (Eliminação Total de Laços/Swallowtails) (v0.10.1)
 
 

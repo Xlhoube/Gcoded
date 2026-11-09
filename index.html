@@ -18,6 +18,8 @@
   <script src="https://cdn.jsdelivr.net/npm/imagetracerjs@1.2.6/imagetracer_v1.2.6.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <!-- ClipperLib Offline-First para Geometria e Desfasamento Poligonal sem Auto-Interseções -->
+  <script src="./lib/clipper.js"></script>
 </head>
 
 <body>
@@ -854,7 +856,7 @@
     <button id="cam-toast-action" class="cam-toast-btn">👁️ Abrir Simulador 3D</button>
   </div>
 
-  <script type="module" src="./src/app.js?v=0.10.0"></script>
+  <script type="module" src="./src/app.js?v=0.10.1"></script>
 </body>
 
 </html>

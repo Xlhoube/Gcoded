@@ -1,10 +1,11 @@
 // Service Worker para Gcoded CAM - Suporte Offline-First e Instalação PWA
-const CACHE_NAME = 'gcoded-v0.10.0';
+const CACHE_NAME = 'gcoded-v0.10.1';
 const CORE_ASSETS = [
   './',
   './index.html',
   './style.css',
   './src/app.js',
+  './lib/clipper.js',
   './manifest.webmanifest',
   './favicon.svg',
   './icons/icon.svg',
