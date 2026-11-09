@@ -71,9 +71,10 @@
 
       <div class="install-group" style="display: flex; gap: 0.45rem; align-items: center;">
         <button id="btn-version-badge" class="action-btn version-badge-btn"
-          title="Gcoded CAM v0.10.1 - Clica para verificar atualizações ou ver novidades">
-          <span id="version-pulse-dot" class="version-dot"></span>
+          title="Gcoded CAM v0.10.1 - Clica para abrir o painel de atualizações ou ver novidades">
+          <span class="icon">🚀</span>
           <span id="version-badge-text">v0.10.1</span>
+          <span id="version-pulse-dot" class="version-dot"></span>
         </button>
         <button id="btn-install-app" class="action-btn install-btn"
           title="Instalar Gcoded no computador ou telemóvel para acesso rápido e 100% offline">
@@ -874,11 +875,11 @@
             <span class="update-badge">NOVA VERSÃO</span>
             <span id="update-version-label" class="update-version-text">v0.10.1</span>
           </div>
-          <h4 class="update-title">Atualização Disponível!</h4>
+          <h4 id="update-popup-title" class="update-title">Atualização Disponível!</h4>
         </div>
         <button id="btn-close-update-popup" class="update-close-btn" title="Lembrar mais tarde">✕</button>
       </div>
-      <p class="update-desc">
+      <p id="update-popup-desc" class="update-desc">
         Foi descarregada uma nova versão do Gcoded com melhorias de cálculo e correções. Atualiza para carregar as novidades.
       </p>
       <div class="update-actions">

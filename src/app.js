@@ -5451,6 +5451,7 @@ function setupPWAInstall() {
 /**
  * Gestão de Atualizações PWA (Update Popup & Service Worker Lifecycle)
  */
+const CURRENT_APP_VERSION = '0.10.1';
 let waitingServiceWorker = null;
 let updatePopupEl = null;
 let updateModalEl = null;
@@ -5458,13 +5459,37 @@ let btnVersionBadgeEl = null;
 
 /**
  * Exibe o Popup Flutuante de Atualização Disponível
+ * Suporta tanto o modo de notificação de nova versão ativa como o modo de atualização pendente do SW
  */
-function showUpdatePopup(versionStr = 'v0.10.1') {
+function showUpdatePopup(versionStr = 'v0.10.1', options = {}) {
   if (!updatePopupEl) updatePopupEl = document.getElementById('update-popup');
   if (btnVersionBadgeEl) btnVersionBadgeEl.classList.add('update-ready');
-  
+
   const versionLabel = document.getElementById('update-version-label');
   if (versionLabel) versionLabel.textContent = versionStr;
+
+  const titleEl = document.getElementById('update-popup-title');
+  const descEl = document.getElementById('update-popup-desc');
+  const btnNow = document.getElementById('btn-update-now');
+
+  if (options.isNewVersionNotice) {
+    if (titleEl) titleEl.textContent = options.title || `🎉 Versão ${versionStr} Ativa!`;
+    if (descEl) descEl.textContent = options.desc || 'O Gcoded foi atualizado com o motor industrial ClipperLib (sem laços nem auto-interseções) e alívios Dogbone.';
+    if (btnNow) {
+      btnNow.innerHTML = '<span>👍 Explorar v0.10.1</span>';
+      btnNow.onclick = () => {
+        localStorage.setItem('gcoded_viewed_version', CURRENT_APP_VERSION);
+        hideUpdatePopup();
+      };
+    }
+  } else {
+    if (titleEl) titleEl.textContent = options.title || '🚀 Atualização Disponível!';
+    if (descEl) descEl.textContent = options.desc || 'Foi descarregada uma nova versão do Gcoded com melhorias e correções. Clica para atualizar.';
+    if (btnNow) {
+      btnNow.innerHTML = '<span>⚡ Atualizar Agora</span>';
+      btnNow.onclick = applyPWAUpdate;
+    }
+  }
 
   if (updatePopupEl) {
     updatePopupEl.style.display = 'block';
@@ -5478,6 +5503,7 @@ function showUpdatePopup(versionStr = 'v0.10.1') {
  * Oculta o Popup Flutuante de Atualização
  */
 function hideUpdatePopup() {
+  localStorage.setItem('gcoded_viewed_version', CURRENT_APP_VERSION);
   if (!updatePopupEl) updatePopupEl = document.getElementById('update-popup');
   if (updatePopupEl) {
     updatePopupEl.classList.remove('show');
@@ -5559,8 +5585,6 @@ function registerServiceWorker() {
   const btnCheckUpdateModal = document.getElementById('btn-check-update-modal');
 
   // Eventos de clique do Popup
-  if (btnUpdateNow) btnUpdateNow.addEventListener('click', applyPWAUpdate);
-  if (btnModalUpdateNow) btnModalUpdateNow.addEventListener('click', applyPWAUpdate);
   if (btnCloseUpdatePopup) btnCloseUpdatePopup.addEventListener('click', hideUpdatePopup);
 
   if (btnUpdateDetails) {
@@ -5573,67 +5597,63 @@ function registerServiceWorker() {
   // Eventos do Modal de Novidades
   if (btnCloseUpdateModal) btnCloseUpdateModal.addEventListener('click', closeUpdateModal);
   if (btnCloseUpdateModalFooter) btnCloseUpdateModalFooter.addEventListener('click', closeUpdateModal);
+  if (btnModalUpdateNow) btnModalUpdateNow.addEventListener('click', applyPWAUpdate);
   if (updateModalEl) {
     updateModalEl.addEventListener('click', (e) => {
       if (e.target === updateModalEl) closeUpdateModal();
     });
   }
 
-  // Botão de versão na barra superior (Top Bar)
+  // Botão de versão na barra superior (Top Bar): abre popup flutuante
   if (btnVersionBadgeEl) {
     btnVersionBadgeEl.addEventListener('click', () => {
-      if (waitingServiceWorker) {
-        showUpdatePopup();
-      } else {
-        openUpdateModal();
-      }
+      showUpdatePopup(`v${CURRENT_APP_VERSION}`, {
+        isNewVersionNotice: !waitingServiceWorker,
+        title: waitingServiceWorker ? '🚀 Atualização Pronta!' : `✨ Gcoded CAM v${CURRENT_APP_VERSION}`,
+        desc: waitingServiceWorker 
+          ? 'Foi descarregada uma nova versão. Clica para atualizar e recarregar.' 
+          : 'Estás a usar a versão mais recente com motor ClipperLib 2D, alívios Dogbone/T-Bone e suporte PWA offline.'
+      });
     });
   }
 
   // Botão de verificação manual no modal
   if (btnCheckUpdateModal) {
     btnCheckUpdateModal.addEventListener('click', () => {
-      if (!('serviceWorker' in navigator)) {
-        showCamToast('ℹ️ O teu navegador não suporta Service Workers.');
-        return;
-      }
       btnCheckUpdateModal.innerHTML = '🔍 A verificar...';
       btnCheckUpdateModal.disabled = true;
 
-      navigator.serviceWorker.getRegistration().then((reg) => {
-        if (!reg) {
-          btnCheckUpdateModal.innerHTML = '🔍 Verificar Atualizações';
-          btnCheckUpdateModal.disabled = false;
-          showCamToast('ℹ️ Service Worker não registado nesta sessão.');
-          return;
-        }
-
-        if (reg.waiting) {
-          waitingServiceWorker = reg.waiting;
-          closeUpdateModal();
-          showUpdatePopup();
-          return;
-        }
-
-        reg.update().then(() => {
+      // Verificar ficheiro version.json no servidor
+      fetch(`./version.json?_t=${Date.now()}`, { cache: 'no-store' })
+        .then(res => res.json())
+        .then(info => {
           setTimeout(() => {
             btnCheckUpdateModal.innerHTML = '🔍 Verificar Atualizações';
             btnCheckUpdateModal.disabled = false;
-            if (reg.waiting) {
-              waitingServiceWorker = reg.waiting;
+
+            if (info && info.version && info.version !== CURRENT_APP_VERSION) {
               closeUpdateModal();
-              showUpdatePopup();
+              showUpdatePopup(`v${info.version}`, {
+                isNewVersionNotice: false,
+                title: `🚀 Nova Versão v${info.version} Disponível!`,
+                desc: 'Existe uma nova versão com melhorias pronta no servidor. Clica para atualizar.'
+              });
             } else {
-              showCamToast('✅ Estás a usar a versão mais recente do Gcoded (v0.10.1)!');
+              showCamToast(`✅ Estás a usar a versão mais recente do Gcoded (v${CURRENT_APP_VERSION})!`);
             }
-          }, 600);
-        }).catch((err) => {
+          }, 500);
+        })
+        .catch(() => {
           btnCheckUpdateModal.innerHTML = '🔍 Verificar Atualizações';
           btnCheckUpdateModal.disabled = false;
-          console.warn('[Gcoded SW] Erro ao verificar atualização:', err);
-          showCamToast('✅ Estás a usar a versão mais recente do Gcoded (v0.10.1)!');
+          showCamToast(`✅ Estás a usar a versão mais recente do Gcoded (v${CURRENT_APP_VERSION})!`);
         });
-      });
+
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistration().then((reg) => {
+          if (reg) reg.update().catch(() => {});
+        }).catch(() => {});
+      }
     });
   }
 
@@ -5648,7 +5668,19 @@ function registerServiceWorker() {
   window.showUpdatePopup = showUpdatePopup;
   window.openUpdateModal = openUpdateModal;
 
-  // Registo do Service Worker
+  // Auto-exibir popup de novidades da versão se o utilizador ainda não visualizou esta versão v0.10.1
+  setTimeout(() => {
+    const lastSeenVer = localStorage.getItem('gcoded_viewed_version');
+    if (lastSeenVer !== CURRENT_APP_VERSION) {
+      showUpdatePopup(`v${CURRENT_APP_VERSION}`, {
+        isNewVersionNotice: true,
+        title: '🎉 Bem-vindo ao Gcoded v0.10.1!',
+        desc: 'Atualizado com motor ClipperLib (zero laços ou auto-interseções), alívios de cantos Dogbone/T-Bone e Ramping suave.'
+      });
+    }
+  }, 800);
+
+  // Registo do Service Worker para cache e PWA
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js')
@@ -5658,7 +5690,7 @@ function registerServiceWorker() {
           // 1. Se já existe um worker em espera (update instalado previamente)
           if (reg.waiting) {
             waitingServiceWorker = reg.waiting;
-            showUpdatePopup();
+            showUpdatePopup(`v${CURRENT_APP_VERSION}`, { isNewVersionNotice: false });
           }
 
           // 2. Quando um novo worker é descarregado
@@ -5670,7 +5702,7 @@ function registerServiceWorker() {
               if (installing.state === 'installed' && navigator.serviceWorker.controller) {
                 // Nova versão instalada enquanto a anterior controla a página
                 waitingServiceWorker = installing;
-                showUpdatePopup();
+                showUpdatePopup(`v${CURRENT_APP_VERSION}`, { isNewVersionNotice: false });
                 showCamToast('🚀 Nova atualização do Gcoded pronta a instalar!');
               }
             });

@@ -6,6 +6,7 @@ const CORE_ASSETS = [
   './style.css',
   './src/app.js',
   './lib/clipper.js',
+  './version.json',
   './manifest.webmanifest',
   './favicon.svg',
   './icons/icon.svg',
@@ -57,6 +58,20 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
+
+  // Verificação de atualização: version.json usa Network-First
+  if (url.pathname.endsWith('/version.json')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          return res;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
 
   // Tratamento especial para recursos locais vs CDNs externos
   event.respondWith(
