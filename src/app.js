@@ -110,6 +110,18 @@ let depthPipeline = null;
 let isProcessingAI = false;
 let cachedAIDepthResult = null; // { rawDepthMap: Float32Array, width: number, height: number }
 
+// Sistema de Ordens de Trabalho CAM (Work Orders / Multi-Toolpath Operations)
+let camOperations = []; // Lista de Ordens de Trabalho
+let editingOperationId = null; // ID da ordem que está a ser editada no formulário
+let panelWorkOrders = null;
+let btnAddOperation = null;
+let operationsList = null;
+let operationsCountBadge = null;
+let editingOpBanner = null;
+let editingOpTitle = null;
+let btnSaveEditingOp = null;
+let btnCancelEditingOp = null;
+
 /**
  * Inicialização Principal
  */
@@ -184,6 +196,16 @@ function cacheUIElements() {
   btnRedo = document.getElementById('btn-redo');
   ctxUndo = document.getElementById('ctx-undo');
   ctxRedo = document.getElementById('ctx-redo');
+
+  // Elementos do Painel de Ordens de Trabalho (Percursos CAM)
+  panelWorkOrders = document.getElementById('panel-work-orders');
+  btnAddOperation = document.getElementById('btn-add-operation');
+  operationsList = document.getElementById('operations-list');
+  operationsCountBadge = document.getElementById('operations-count-badge');
+  editingOpBanner = document.getElementById('editing-op-banner');
+  editingOpTitle = document.getElementById('editing-op-title');
+  btnSaveEditingOp = document.getElementById('btn-save-editing-op');
+  btnCancelEditingOp = document.getElementById('btn-cancel-editing-op');
 
   // Inputs e Parâmetros da Fresa (CNC Router)
   inputToolDia = document.getElementById('param-tool-dia');
@@ -1625,6 +1647,13 @@ function initCanvas() {
 
     ctx.restore();
   });
+
+  // Garantir identificador único persistente em todos os contornos vectoriais
+  canvas.on('object:added', function(e) {
+    if (e.target && !e.target.isVisualPath && !e.target.isOriginMarker) {
+      ensureObjectUid(e.target);
+    }
+  });
 }
 
 /**
@@ -1825,6 +1854,11 @@ function setupEventListeners() {
   btnGenerate.addEventListener('click', generateGCode);
   btnDownload.addEventListener('click', downloadGCode);
   btnCopy.addEventListener('click', copyGCodeToClipboard);
+
+  // Ordens de Trabalho CAM (Work Orders)
+  if (btnAddOperation) btnAddOperation.addEventListener('click', createOperationFromCurrentSettings);
+  if (btnSaveEditingOp) btnSaveEditingOp.addEventListener('click', saveEditingOperation);
+  if (btnCancelEditingOp) btnCancelEditingOp.addEventListener('click', cancelEditingOperation);
 
   // Controlos manuais de Zoom
   btnZoomIn.addEventListener('click', zoomInCanvas);
@@ -4471,6 +4505,866 @@ function showCamToast(message, onAction) {
   }, 7000);
 }
 
+/* ==========================================================================
+   SISTEMA DE ORDENS DE TRABALHO CAM (WORK ORDERS / MULTI-TOOLPATH OPERATIONS)
+   ========================================================================== */
+
+/**
+ * Garante que cada contorno/objeto de desenho no canvas tem um UID persistente
+ */
+function ensureObjectUid(obj) {
+  if (!obj) return null;
+  if (!obj.uid) {
+    obj.uid = 'vec_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 6);
+  }
+  return obj.uid;
+}
+
+/**
+ * Retorna a cor de identificação visual da estratégia CAM
+ */
+function getStrategyColor(strategy) {
+  switch (strategy) {
+    case 'pocket': return '#10b981'; // Verde esmeralda
+    case 'chamfer': return '#a855f7'; // Roxo
+    case 'inside': return '#f59e0b'; // Âmbar
+    case 'on': return '#ec4899'; // Rosa
+    case 'outside':
+    default: return '#38bdf8'; // Ciano
+  }
+}
+
+/**
+ * Cria uma nova Ordem de Trabalho CAM a partir da seleção atual e dos parâmetros do painel
+ */
+function createOperationFromCurrentSettings() {
+  if (!canvas) return;
+
+  const userObjects = canvas.getObjects().filter(o => !o.isVisualPath && !o.isOriginMarker);
+  if (userObjects.length === 0) {
+    alert("Adiciona pelo menos uma forma ou contorno ao desenho antes de criar uma ordem de trabalho!");
+    return;
+  }
+
+  const activeObjects = canvas.getActiveObjects().filter(o => !o.isVisualPath && !o.isOriginMarker);
+  let targetUids = [];
+
+  if (activeObjects.length > 0) {
+    targetUids = activeObjects.map(o => ensureObjectUid(o));
+  } else {
+    // Se não há contornos selecionados, associa a todos os contornos da mesa
+    targetUids = userObjects.map(o => ensureObjectUid(o));
+  }
+
+  const strategy = selectStrategy ? selectStrategy.value : 'outside';
+  const stratLabel = getStrategyLabel(strategy);
+  const opNumber = camOperations.length + 1;
+  const defaultName = `Ordem ${opNumber}: ${stratLabel}`;
+
+  // Obter ferramenta atual da biblioteca ou do formulário
+  let toolData = null;
+  if (selectToolLibrary && selectToolLibrary.value) {
+    const matched = toolsLibrary.find(t => t.id === selectToolLibrary.value);
+    if (matched) {
+      toolData = {
+        id: matched.id,
+        name: matched.name,
+        type: matched.type || 'flat',
+        dia: matched.diameter || 3.175,
+        spindle: matched.spindleSpeed || 18000,
+        feedXY: matched.feedXY || 1400,
+        feedZ: matched.feedZ || 400
+      };
+    }
+  }
+
+  if (!toolData) {
+    toolData = {
+      id: 'custom-tool',
+      name: `Fresa ${paramToolType ? paramToolType.value : 'Plano'} ${inputToolDia ? inputToolDia.value : '3.175'}mm`,
+      type: paramToolType ? paramToolType.value : 'flat',
+      dia: parseCAMParam(inputToolDia, 3.175),
+      spindle: parseCAMParam(inputSpindleSpeed, 18000),
+      feedXY: parseCAMParam(inputFeedXY, 1400),
+      feedZ: parseCAMParam(inputFeedZ, 400)
+    };
+  }
+
+  const newOp = {
+    id: 'op_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 5),
+    name: defaultName,
+    strategy: strategy,
+    enabled: true,
+    visible: true,
+    color: getStrategyColor(strategy),
+    targetObjectUids: targetUids,
+    tool: toolData,
+    params: {
+      depthTotal: parseCAMParam(inputDepthTotal, -3.0),
+      depthPass: parseCAMParam(inputDepthPass, 1.0),
+      safeZ: parseCAMParam(inputSafeZ, 5.0),
+      stepover: inputStepover ? (parseFloat(inputStepover.value) || 40) : 40,
+      chamferWidth: inputChamferWidth ? (parseFloat(inputChamferWidth.value) || 1.0) : 1.0,
+      chamferAngle: paramChamferAngle ? (parseFloat(paramChamferAngle.value) || 90) : 90,
+      chamferSide: paramChamferSide ? paramChamferSide.value : 'outside',
+      chamferTipOffset: paramChamferTipOffset ? (parseFloat(paramChamferTipOffset.value) || 0.5) : 0.5,
+      useTabs: paramUseTabs ? paramUseTabs.checked : false,
+      tabCount: paramTabCount ? (parseInt(paramTabCount.value, 10) || 4) : 4,
+      tabWidth: paramTabWidth ? (parseFloat(paramTabWidth.value) || 5.0) : 5.0,
+      tabHeight: paramTabHeight ? (parseFloat(paramTabHeight.value) || 1.5) : 1.5,
+      useDogbone: paramUseDogbone ? paramUseDogbone.checked : false,
+      dogboneType: paramDogboneType ? paramDogboneType.value : 'dogbone',
+      useRamping: paramUseRamping ? paramUseRamping.checked : false,
+      rampAngle: paramRampAngle ? (parseFloat(paramRampAngle.value) || 10) : 10,
+      rampMaxLen: paramRampMaxLen ? (parseFloat(paramRampMaxLen.value) || 30) : 30,
+      useArcs: paramUseArcs ? paramUseArcs.checked : true
+    }
+  };
+
+  camOperations.push(newOp);
+  renderOperationsList();
+  saveAppState();
+  showCamToast(`✅ ${newOp.name} criada (${targetUids.length} contornos associados)!`);
+
+  // Gera imediatamente a visualização de percursos
+  generateGCode();
+}
+
+/**
+ * Renderiza a lista de Ordens de Trabalho no painel lateral
+ */
+function renderOperationsList() {
+  if (!operationsList) operationsList = document.getElementById('operations-list');
+  if (!operationsCountBadge) operationsCountBadge = document.getElementById('operations-count-badge');
+  if (!operationsList) return;
+
+  if (operationsCountBadge) {
+    operationsCountBadge.innerText = `${camOperations.length} ${camOperations.length === 1 ? 'ordem' : 'ordens'}`;
+  }
+
+  if (camOperations.length === 0) {
+    operationsList.innerHTML = `
+      <div class="operations-empty-state">
+        <span class="empty-icon">📂</span>
+        <strong style="color: #cbd5e1;">Nenhuma ordem de trabalho criada</strong>
+        <p style="margin: 0.25rem 0 0 0; color: #94a3b8; font-size: 0.72rem;">
+          Seleciona um ou mais contornos no desenho, escolhe a estratégia e clica em <b>➕ Criar Ordem para Seleção</b>.
+        </p>
+      </div>
+    `;
+    return;
+  }
+
+  operationsList.innerHTML = camOperations.map((op, idx) => {
+    const isEditing = (op.id === editingOperationId);
+    const strat = op.strategy || 'outside';
+    const stratName = getStrategyLabel(strat);
+    const targetCount = op.targetObjectUids ? op.targetObjectUids.length : 0;
+    const toolName = (op.tool && op.tool.name) || 'Fresa CNC';
+    const depthTotal = (op.params && op.params.depthTotal !== undefined) ? op.params.depthTotal : -3.0;
+
+    return `
+      <div class="operation-card ${isEditing ? 'active' : ''} ${!op.enabled ? 'disabled' : ''}" data-op-id="${op.id}" data-strategy="${strat}">
+        <div class="op-header">
+          <input type="checkbox" class="op-checkbox" data-op-id="${op.id}" ${op.enabled ? 'checked' : ''} title="Ativar ou desativar esta ordem no corte">
+          <span class="op-badge op-badge-${strat}">${escapeHtml(stratName)}</span>
+          <input type="text" class="op-title-input" data-op-id="${op.id}" value="${escapeHtml(op.name)}" title="Clica para renomear esta ordem">
+          <div class="op-quick-actions">
+            <button type="button" class="op-btn-icon op-btn-up" data-op-id="${op.id}" ${idx === 0 ? 'disabled style="opacity:0.3; cursor:default;"' : ''} title="Mover para cima (cortar antes)">▲</button>
+            <button type="button" class="op-btn-icon op-btn-down" data-op-id="${op.id}" ${idx === camOperations.length - 1 ? 'disabled style="opacity:0.3; cursor:default;"' : ''} title="Mover para baixo (cortar depois)">▼</button>
+            <button type="button" class="op-btn-icon op-btn-delete" data-op-id="${op.id}" title="Eliminar esta ordem">🗑️</button>
+          </div>
+        </div>
+        <div class="op-details">
+          <span class="op-tool-info">🔧 ${escapeHtml(toolName)} | Z: ${depthTotal.toFixed(1)}mm</span>
+          <span class="op-vectors-count">🎯 ${targetCount} ${targetCount === 1 ? 'contorno' : 'contornos'}</span>
+        </div>
+        <div class="op-footer">
+          <button type="button" class="op-sub-btn primary op-btn-select" data-op-id="${op.id}" title="Ver e selecionar os contornos desta ordem no desenho">🎯 Ver no Desenho</button>
+          <button type="button" class="op-sub-btn op-btn-reassign" data-op-id="${op.id}" title="Atribuir a seleção atual do canvas a esta ordem">🔄 Atualizar Seleção</button>
+          <button type="button" class="op-sub-btn op-btn-edit" data-op-id="${op.id}" title="Carregar definições desta ordem para o formulário">⚙️ Editar</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Atribuir ouvintes aos controlos interativos de cada cartão
+  operationsList.querySelectorAll('.op-checkbox').forEach(chk => {
+    chk.addEventListener('change', (e) => {
+      e.stopPropagation();
+      toggleOperation(chk.dataset.opId);
+    });
+  });
+
+  operationsList.querySelectorAll('.op-title-input').forEach(input => {
+    input.addEventListener('change', (e) => {
+      renameOperation(input.dataset.opId, input.value);
+    });
+    input.addEventListener('click', (e) => e.stopPropagation());
+  });
+
+  operationsList.querySelectorAll('.op-btn-up').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      moveOperation(btn.dataset.opId, -1);
+    });
+  });
+
+  operationsList.querySelectorAll('.op-btn-down').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      moveOperation(btn.dataset.opId, 1);
+    });
+  });
+
+  operationsList.querySelectorAll('.op-btn-delete').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteOperation(btn.dataset.opId);
+    });
+  });
+
+  operationsList.querySelectorAll('.op-btn-select').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectOperationVectorsOnCanvas(btn.dataset.opId);
+    });
+  });
+
+  operationsList.querySelectorAll('.op-btn-reassign').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      reassignOperationVectors(btn.dataset.opId);
+    });
+  });
+
+  operationsList.querySelectorAll('.op-btn-edit').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      loadOperationIntoForm(btn.dataset.opId);
+    });
+  });
+
+  operationsList.querySelectorAll('.operation-card').forEach(card => {
+    card.addEventListener('click', () => {
+      selectOperationVectorsOnCanvas(card.dataset.opId);
+    });
+  });
+}
+
+/**
+ * Ativa / desativa uma ordem de trabalho no corte
+ */
+function toggleOperation(opId) {
+  const op = camOperations.find(o => o.id === opId);
+  if (!op) return;
+  op.enabled = !op.enabled;
+  saveAppState();
+  renderOperationsList();
+  generateGCode();
+}
+
+/**
+ * Move a posição de uma ordem de trabalho na sequência de corte
+ */
+function moveOperation(opId, direction) {
+  const idx = camOperations.findIndex(o => o.id === opId);
+  if (idx === -1) return;
+  const newIdx = idx + direction;
+  if (newIdx < 0 || newIdx >= camOperations.length) return;
+  const [moved] = camOperations.splice(idx, 1);
+  camOperations.splice(newIdx, 0, moved);
+  saveAppState();
+  renderOperationsList();
+  generateGCode();
+}
+
+/**
+ * Elimina uma ordem de trabalho
+ */
+function deleteOperation(opId) {
+  const op = camOperations.find(o => o.id === opId);
+  if (!op) return;
+  if (!confirm(`Tens a certeza que desejas eliminar a ordem "${op.name}"?`)) return;
+  if (editingOperationId === opId) {
+    cancelEditingOperation();
+  }
+  camOperations = camOperations.filter(o => o.id !== opId);
+  saveAppState();
+  renderOperationsList();
+  generateGCode();
+  showCamToast(`🗑️ Ordem eliminada.`);
+}
+
+/**
+ * Renomeia uma ordem de trabalho
+ */
+function renameOperation(opId, newName) {
+  const op = camOperations.find(o => o.id === opId);
+  if (!op) return;
+  op.name = newName.trim() || op.name;
+  saveAppState();
+}
+
+/**
+ * Seleciona e destaca no canvas os contornos associados a uma ordem
+ */
+function selectOperationVectorsOnCanvas(opId) {
+  const op = camOperations.find(o => o.id === opId);
+  if (!op || !canvas) return;
+  const objs = getObjectsForOperation(op);
+  if (objs.length === 0) {
+    showCamToast(`Nenhum contorno associado à ordem "${op.name}".`);
+    return;
+  }
+  canvas.discardActiveObject();
+  if (objs.length === 1) {
+    canvas.setActiveObject(objs[0]);
+  } else {
+    const sel = new fabric.ActiveSelection(objs, { canvas: canvas });
+    canvas.setActiveObject(sel);
+  }
+  canvas.requestRenderAll();
+  showCamToast(`🎯 ${objs.length} contorno(s) selecionado(s) para "${op.name}"`);
+}
+
+/**
+ * Reassocia a ordem à seleção atual de contornos no canvas
+ */
+function reassignOperationVectors(opId) {
+  const op = camOperations.find(o => o.id === opId);
+  if (!op || !canvas) return;
+  const selected = canvas.getActiveObjects().filter(o => !o.isVisualPath && !o.isOriginMarker);
+  if (selected.length === 0) {
+    alert("Seleciona primeiro no desenho os contornos que pretendes associar a esta ordem.");
+    return;
+  }
+  op.targetObjectUids = selected.map(o => ensureObjectUid(o));
+  saveAppState();
+  renderOperationsList();
+  showCamToast(`🔄 Ordem "${op.name}" agora associada a ${selected.length} contorno(s).`);
+  generateGCode();
+}
+
+/**
+ * Carrega os parâmetros de uma ordem de trabalho para os campos do formulário para edição
+ */
+function loadOperationIntoForm(opId) {
+  const op = camOperations.find(o => o.id === opId);
+  if (!op) return;
+
+  editingOperationId = opId;
+
+  if (!editingOpBanner) editingOpBanner = document.getElementById('editing-op-banner');
+  if (!editingOpTitle) editingOpTitle = document.getElementById('editing-op-title');
+
+  if (editingOpBanner && editingOpTitle) {
+    editingOpTitle.innerText = `A editar: ${op.name}`;
+    editingOpBanner.style.display = 'flex';
+  }
+
+  // Sincronizar Estratégia
+  syncStrategyUI(op.strategy, false);
+
+  // Sincronizar Ferramenta
+  if (op.tool) {
+    if (op.tool.id && selectToolLibrary) selectToolLibrary.value = op.tool.id;
+    if (inputToolDia && op.tool.dia !== undefined) inputToolDia.value = op.tool.dia;
+    if (paramToolType && op.tool.type) paramToolType.value = op.tool.type;
+    if (inputSpindleSpeed && op.tool.spindle !== undefined) inputSpindleSpeed.value = op.tool.spindle;
+    if (inputFeedXY && op.tool.feedXY !== undefined) inputFeedXY.value = op.tool.feedXY;
+    if (inputFeedZ && op.tool.feedZ !== undefined) inputFeedZ.value = op.tool.feedZ;
+  }
+
+  // Sincronizar Profundidades e Parâmetros
+  if (op.params) {
+    if (inputDepthTotal && op.params.depthTotal !== undefined) inputDepthTotal.value = op.params.depthTotal;
+    if (inputDepthPass && op.params.depthPass !== undefined) inputDepthPass.value = op.params.depthPass;
+    if (inputSafeZ && op.params.safeZ !== undefined) inputSafeZ.value = op.params.safeZ;
+    if (inputStepover && op.params.stepover !== undefined) inputStepover.value = op.params.stepover;
+
+    // Chanfro
+    if (inputChamferWidth && op.params.chamferWidth !== undefined) inputChamferWidth.value = op.params.chamferWidth;
+    if (paramChamferAngle && op.params.chamferAngle !== undefined) paramChamferAngle.value = op.params.chamferAngle;
+    if (paramChamferSide && op.params.chamferSide) paramChamferSide.value = op.params.chamferSide;
+    if (paramChamferTipOffset && op.params.chamferTipOffset !== undefined) paramChamferTipOffset.value = op.params.chamferTipOffset;
+
+    // Abas de Retenção
+    if (paramUseTabs && op.params.useTabs !== undefined) {
+      paramUseTabs.checked = op.params.useTabs;
+      if (tabsSettingsGrid) {
+        tabsSettingsGrid.style.opacity = op.params.useTabs ? '1' : '0.45';
+        tabsSettingsGrid.style.pointerEvents = op.params.useTabs ? 'auto' : 'none';
+      }
+    }
+    if (paramTabCount && op.params.tabCount !== undefined) paramTabCount.value = op.params.tabCount;
+    if (paramTabWidth && op.params.tabWidth !== undefined) paramTabWidth.value = op.params.tabWidth;
+    if (paramTabHeight && op.params.tabHeight !== undefined) paramTabHeight.value = op.params.tabHeight;
+
+    // Dogbone & Rampa
+    if (paramUseDogbone && op.params.useDogbone !== undefined) {
+      paramUseDogbone.checked = op.params.useDogbone;
+      if (dogboneSettingsGrid) {
+        dogboneSettingsGrid.style.opacity = op.params.useDogbone ? '1' : '0.45';
+        dogboneSettingsGrid.style.pointerEvents = op.params.useDogbone ? 'auto' : 'none';
+      }
+    }
+    if (paramDogboneType && op.params.dogboneType) paramDogboneType.value = op.params.dogboneType;
+    if (paramUseRamping && op.params.useRamping !== undefined) {
+      paramUseRamping.checked = op.params.useRamping;
+      if (rampingSettingsGrid) {
+        rampingSettingsGrid.style.opacity = op.params.useRamping ? '1' : '0.45';
+        rampingSettingsGrid.style.pointerEvents = op.params.useRamping ? 'auto' : 'none';
+      }
+    }
+    if (paramRampAngle && op.params.rampAngle !== undefined) paramRampAngle.value = op.params.rampAngle;
+    if (paramRampMaxLen && op.params.rampMaxLen !== undefined) paramRampMaxLen.value = op.params.rampMaxLen;
+  }
+
+  selectOperationVectorsOnCanvas(opId);
+  renderOperationsList();
+}
+
+/**
+ * Guarda as alterações dos campos do formulário na ordem atualmente em edição
+ */
+function saveEditingOperation() {
+  if (!editingOperationId) return;
+  const op = camOperations.find(o => o.id === editingOperationId);
+  if (!op) return;
+
+  op.strategy = selectStrategy ? selectStrategy.value : op.strategy;
+  op.color = getStrategyColor(op.strategy);
+
+  // Atualizar ferramenta
+  let toolData = null;
+  if (selectToolLibrary && selectToolLibrary.value) {
+    const matched = toolsLibrary.find(t => t.id === selectToolLibrary.value);
+    if (matched) {
+      toolData = {
+        id: matched.id,
+        name: matched.name,
+        type: matched.type || 'flat',
+        dia: matched.diameter || 3.175,
+        spindle: matched.spindleSpeed || 18000,
+        feedXY: matched.feedXY || 1400,
+        feedZ: matched.feedZ || 400
+      };
+    }
+  }
+
+  if (!toolData) {
+    toolData = {
+      id: op.tool ? op.tool.id : 'custom-tool',
+      name: op.tool ? op.tool.name : `Fresa CNC`,
+      type: paramToolType ? paramToolType.value : 'flat',
+      dia: parseCAMParam(inputToolDia, 3.175),
+      spindle: parseCAMParam(inputSpindleSpeed, 18000),
+      feedXY: parseCAMParam(inputFeedXY, 1400),
+      feedZ: parseCAMParam(inputFeedZ, 400)
+    };
+  }
+  op.tool = toolData;
+
+  // Atualizar parâmetros
+  op.params = {
+    depthTotal: parseCAMParam(inputDepthTotal, -3.0),
+    depthPass: parseCAMParam(inputDepthPass, 1.0),
+    safeZ: parseCAMParam(inputSafeZ, 5.0),
+    stepover: inputStepover ? (parseFloat(inputStepover.value) || 40) : 40,
+    chamferWidth: inputChamferWidth ? (parseFloat(inputChamferWidth.value) || 1.0) : 1.0,
+    chamferAngle: paramChamferAngle ? (parseFloat(paramChamferAngle.value) || 90) : 90,
+    chamferSide: paramChamferSide ? paramChamferSide.value : 'outside',
+    chamferTipOffset: paramChamferTipOffset ? (parseFloat(paramChamferTipOffset.value) || 0.5) : 0.5,
+    useTabs: paramUseTabs ? paramUseTabs.checked : false,
+    tabCount: paramTabCount ? (parseInt(paramTabCount.value, 10) || 4) : 4,
+    tabWidth: paramTabWidth ? (parseFloat(paramTabWidth.value) || 5.0) : 5.0,
+    tabHeight: paramTabHeight ? (parseFloat(paramTabHeight.value) || 1.5) : 1.5,
+    useDogbone: paramUseDogbone ? paramUseDogbone.checked : false,
+    dogboneType: paramDogboneType ? paramDogboneType.value : 'dogbone',
+    useRamping: paramUseRamping ? paramUseRamping.checked : false,
+    rampAngle: paramRampAngle ? (parseFloat(paramRampAngle.value) || 10) : 10,
+    rampMaxLen: paramRampMaxLen ? (parseFloat(paramRampMaxLen.value) || 30) : 30,
+    useArcs: paramUseArcs ? paramUseArcs.checked : true
+  };
+
+  editingOperationId = null;
+  if (!editingOpBanner) editingOpBanner = document.getElementById('editing-op-banner');
+  if (editingOpBanner) editingOpBanner.style.display = 'none';
+
+  renderOperationsList();
+  saveAppState();
+  generateGCode();
+  showCamToast(`💾 Ordem "${op.name}" atualizada com sucesso!`);
+}
+
+/**
+ * Cancela o modo de edição da ordem de trabalho
+ */
+function cancelEditingOperation() {
+  editingOperationId = null;
+  if (!editingOpBanner) editingOpBanner = document.getElementById('editing-op-banner');
+  if (editingOpBanner) editingOpBanner.style.display = 'none';
+  renderOperationsList();
+}
+
+/**
+ * Retorna os objetos Fabric.js atribuídos a uma ordem de trabalho
+ */
+function getObjectsForOperation(op) {
+  if (!canvas) return [];
+  const allUserObjs = canvas.getObjects().filter(o => !o.isVisualPath && !o.isOriginMarker);
+  if (!op.targetObjectUids || op.targetObjectUids.length === 0) {
+    return allUserObjs;
+  }
+  const uidSet = new Set(op.targetObjectUids);
+  const matched = [];
+  allUserObjs.forEach(obj => {
+    if (obj.uid && uidSet.has(obj.uid)) {
+      matched.push(obj);
+    } else if (obj.type === 'group' && obj.getObjects) {
+      if (obj.uid && uidSet.has(obj.uid)) {
+        matched.push(obj);
+      } else {
+        const hasChild = obj.getObjects().some(c => c.uid && uidSet.has(c.uid));
+        if (hasChild) matched.push(obj);
+      }
+    }
+  });
+  return matched;
+}
+
+/**
+ * Extrai subpaths geométricos a partir de um objeto Fabric.js (rect, circle, line, path, svg)
+ */
+function extractSubpathsFromObject(obj, parentGroup, groupMatrix, curStrategy) {
+  const matrix = parentGroup 
+    ? fabric.util.multiplyTransformMatrices(groupMatrix, obj.calcTransformMatrix())
+    : obj.calcTransformMatrix();
+
+  let subpaths = [];
+
+  // --- CASO 1: RETÂNGULO ---
+  if (obj.type === 'rect') {
+    const hw = obj.width / 2;
+    const hh = obj.height / 2;
+    const pts = [
+      { x: -hw, y: -hh }, { x: hw, y: -hh }, { x: hw, y: hh }, { x: -hw, y: hh }, { x: -hw, y: -hh }
+    ].map(p => fabric.util.transformPoint(new fabric.Point(p.x, p.y), matrix));
+    pts.camStrategy = curStrategy;
+    subpaths.push(pts);
+  }
+  // --- CASO 2: CÍRCULO ---
+  else if (obj.type === 'circle') {
+    const scaleFactor = (obj.scaleX || 1) * (parentGroup ? (parentGroup.scaleX || 1) : 1);
+    const radius = obj.radius * scaleFactor;
+    const localCenter = obj.getCenterPoint();
+    const center = parentGroup 
+      ? fabric.util.transformPoint(localCenter, groupMatrix)
+      : localCenter;
+    const useArcs = paramUseArcs ? paramUseArcs.checked : true;
+
+    const steps = 64;
+    const pts = [];
+    for (let i = 0; i <= steps; i++) {
+      const theta = (i / steps) * 2 * Math.PI;
+      const px = center.x + radius * Math.cos(theta);
+      const py = center.y + radius * Math.sin(theta);
+      pts.push({ x: px, y: py });
+    }
+    pts.camStrategy = curStrategy;
+
+    if (useArcs) {
+      subpaths.push({
+        isArcCircle: true,
+        center,
+        radius,
+        visualPoints: pts,
+        camStrategy: curStrategy
+      });
+    } else {
+      subpaths.push(pts);
+    }
+  }
+  // --- CASO 3: LINHA ---
+  else if (obj.type === 'line') {
+    const lp = obj.calcLinePoints();
+    const pts = [
+      fabric.util.transformPoint(new fabric.Point(lp.x1, lp.y1), matrix),
+      fabric.util.transformPoint(new fabric.Point(lp.x2, lp.y2), matrix)
+    ];
+    pts.camStrategy = curStrategy;
+    subpaths.push(pts);
+  }
+  // --- CASO 4: PATH / SVG ---
+  else {
+    const svgNS = "http://www.w3.org/2000/svg";
+    const tempSvg = document.createElementNS(svgNS, "svg");
+    document.body.appendChild(tempSvg);
+
+    const dStrings = [];
+    if (obj.type === 'path') {
+      const pathCommands = obj.path;
+      let currentD = [];
+      for (let c = 0; c < pathCommands.length; c++) {
+        const cmd = pathCommands[c];
+        if ((cmd[0] === 'M' || cmd[0] === 'm') && currentD.length > 0) {
+          dStrings.push(currentD.map(p => p.join(' ')).join(' '));
+          currentD = [];
+        }
+        currentD.push(cmd);
+      }
+      if (currentD.length > 0) {
+        dStrings.push(currentD.map(p => p.join(' ')).join(' '));
+      }
+    } else {
+      const svgString = obj.toSVG();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(svgString, 'image/svg+xml');
+      const paths = doc.querySelectorAll('path');
+      paths.forEach(p => {
+        const d = p.getAttribute('d');
+        if (d && d.trim()) dStrings.push(d.trim());
+      });
+    }
+
+    const offX = (obj.type === 'path' && obj.pathOffset) ? obj.pathOffset.x : 0;
+    const offY = (obj.type === 'path' && obj.pathOffset) ? obj.pathOffset.y : 0;
+
+    dStrings.forEach(dStr => {
+      if (!dStr.trim()) return;
+      const tempPath = document.createElementNS(svgNS, "path");
+      tempPath.setAttribute('d', dStr);
+      tempSvg.appendChild(tempPath);
+      try {
+        const totalLength = tempPath.getTotalLength();
+        if (totalLength > 0.05) {
+          const stepSize = 2; // 1mm em px (ESCALA_MM_PX = 2)
+          const numPoints = Math.max(12, Math.ceil(totalLength / stepSize));
+          const pts = [];
+          for (let i = 0; i <= numPoints; i++) {
+            const dist = (i / numPoints) * totalLength;
+            const pt = tempPath.getPointAtLength(dist);
+            const transformedPt = fabric.util.transformPoint(new fabric.Point(pt.x - offX, pt.y - offY), matrix);
+            pts.push(transformedPt);
+          }
+          if (pts.length > 0) {
+            pts.camStrategy = curStrategy;
+            subpaths.push(pts);
+          }
+        }
+      } catch (e) {
+        console.warn("Erro ao ler subpath SVG:", e);
+      } finally {
+        tempSvg.removeChild(tempPath);
+      }
+    });
+
+    document.body.removeChild(tempSvg);
+  }
+
+  return subpaths;
+}
+
+/**
+ * Executa o cálculo de percurso de ferramenta para um subpath geométrico e adiciona os comandos ao G-code
+ */
+function processSubpathToolpath(subItem, itemStrategy, opSettings, gcode, toolpathsToVisualise) {
+  const {
+    toolDia,
+    toolRadius,
+    safeZ,
+    feedXY,
+    feedZ,
+    depthTotal,
+    depthPass,
+    stepover,
+    chamferZCut,
+    chamferOffset,
+    useTabs,
+    tabCount,
+    tabWidth,
+    tabHeight,
+    useDogbone,
+    dogboneType,
+    useRamping,
+    rampAngle,
+    rampMaxLen,
+    wcsX,
+    wcsY,
+    toolpathColor
+  } = opSettings;
+
+  // 1. CÍRCULO COM ARCOS NATIVOS G2 (quando tabs não estão ativos e não é pocket)
+  if (subItem && subItem.isArcCircle && !useTabs && itemStrategy !== 'pocket') {
+    const { center, radius } = subItem;
+
+    const cxMM = (center.x / ESCALA_MM_PX) - wcsX;
+    const cyMM = ((canvas.height - center.y) / ESCALA_MM_PX) - wcsY;
+    const rBaseMM = radius / ESCALA_MM_PX;
+
+    let rCut = rBaseMM;
+    let targetDepth = depthTotal;
+    if (itemStrategy === 'outside') {
+      rCut = rBaseMM + toolRadius;
+    } else if (itemStrategy === 'inside') {
+      rCut = Math.max(0.1, rBaseMM - toolRadius);
+    } else if (itemStrategy === 'chamfer') {
+      targetDepth = chamferZCut;
+      rCut = Math.max(0.1, rBaseMM + chamferOffset);
+    }
+
+    // Amostragem para renderização visual no canvas 2D
+    const visPts = [];
+    for (let i = 0; i <= 64; i++) {
+      const theta = (i / 64) * 2 * Math.PI;
+      visPts.push({
+        x: (cxMM + rCut * Math.cos(theta) + wcsX) * ESCALA_MM_PX,
+        y: canvas.height - ((cyMM + rCut * Math.sin(theta) + wcsY) * ESCALA_MM_PX)
+      });
+    }
+    toolpathsToVisualise.push({ points: visPts, color: toolpathColor });
+
+    const startX = cxMM - rCut;
+    const startY = cyMM;
+
+    const zPasses = [];
+    let currentZ = -depthPass;
+    while (currentZ > targetDepth) {
+      zPasses.push(currentZ);
+      currentZ -= depthPass;
+    }
+    zPasses.push(targetDepth);
+
+    gcode.push(`G0 Z${safeZ.toFixed(3)}`);
+    gcode.push(`G0 X${startX.toFixed(3)} Y${startY.toFixed(3)}`);
+
+    zPasses.forEach((zVal) => {
+      gcode.push(`G1 Z${zVal.toFixed(3)} F${feedZ.toFixed(0)}`);
+      gcode.push(`G2 X${(cxMM + rCut).toFixed(3)} Y${cyMM.toFixed(3)} I${rCut.toFixed(3)} J0.000 F${feedXY.toFixed(0)}`);
+      gcode.push(`G2 X${(cxMM - rCut).toFixed(3)} Y${cyMM.toFixed(3)} I${(-rCut).toFixed(3)} J0.000 F${feedXY.toFixed(0)}`);
+    });
+
+    gcode.push(`G0 Z${safeZ.toFixed(3)}`);
+    return;
+  }
+
+  // 2. CONTORNOS POLIGONAIS, RETÂNGULOS, DXF E SVGs
+  const rawPoints = (subItem && subItem.isArcCircle) ? subItem.visualPoints : (subItem.points || subItem);
+  if (!rawPoints || rawPoints.length < 2) return;
+
+  // Converter pontos em coordenadas físicas de maquinação (mm)
+  const mmPoints = rawPoints.map(pt => ({
+    x: (pt.x / ESCALA_MM_PX) - wcsX,
+    y: ((canvas.height - pt.y) / ESCALA_MM_PX) - wcsY
+  }));
+
+  const isClosed = Math.hypot(mmPoints[0].x - mmPoints[mmPoints.length - 1].x,
+                              mmPoints[0].y - mmPoints[mmPoints.length - 1].y) < 0.1;
+
+  // Gerar os laços de corte (loops) consoante a estratégia selecionada
+  let loopsToCut = [];
+  let targetDepth = depthTotal;
+
+  if (itemStrategy === 'chamfer') {
+    targetDepth = chamferZCut;
+    if (!isClosed || Math.abs(chamferOffset) < 1e-4) {
+      loopsToCut = [mmPoints];
+    } else {
+      loopsToCut = offsetContour(mmPoints, chamferOffset);
+      if (!loopsToCut || loopsToCut.length === 0) loopsToCut = [mmPoints];
+    }
+  } else if (!isClosed || itemStrategy === 'on') {
+    loopsToCut = [mmPoints];
+  } else if (itemStrategy === 'outside') {
+    loopsToCut = offsetContour(mmPoints, toolRadius);
+  } else if (itemStrategy === 'inside') {
+    loopsToCut = offsetContour(mmPoints, -toolRadius);
+  } else if (itemStrategy === 'pocket') {
+    // Desbaste Concêntrico Total de Caixa / Cavidade
+    loopsToCut = generatePocketToolpaths(mmPoints, toolDia, stepover);
+    if (!loopsToCut || loopsToCut.length === 0) loopsToCut = [mmPoints];
+  }
+
+  // Aplicar alívios de cantos nos cantos internos se ativado
+  if (useDogbone && isClosed && itemStrategy !== 'chamfer' && itemStrategy !== 'pocket') {
+    loopsToCut = loopsToCut.map(l => applyDogboneRelief(l, toolRadius, dogboneType, itemStrategy));
+  }
+
+  // Visualização 2D no Canvas com cores específicas por estratégia
+  loopsToCut.forEach(loop => {
+    const vis = loop.map(p => ({
+      x: (p.x + wcsX) * ESCALA_MM_PX,
+      y: canvas.height - ((p.y + wcsY) * ESCALA_MM_PX)
+    }));
+    toolpathsToVisualise.push({ points: vis, color: toolpathColor });
+  });
+
+  // Passagens verticais de descida Z
+  const zPasses = [];
+  let currentZ = -depthPass;
+  while (currentZ > targetDepth) {
+    zPasses.push(currentZ);
+    currentZ -= depthPass;
+  }
+  zPasses.push(targetDepth);
+
+  // Executar corte para cada laço gerado
+  loopsToCut.forEach((loop) => {
+    if (!loop || loop.length < 2) return;
+    const startPt = loop[0];
+
+    gcode.push(`G0 Z${safeZ.toFixed(3)}`);
+    gcode.push(`G0 X${startPt.x.toFixed(3)} Y${startPt.y.toFixed(3)}`);
+
+    zPasses.forEach((zVal, pIdx) => {
+      const prevZ = (pIdx === 0) ? 0 : zPasses[pIdx - 1];
+
+      if (!isClosed && pIdx > 0) {
+        gcode.push(`G0 Z${safeZ.toFixed(3)}`);
+        gcode.push(`G0 X${startPt.x.toFixed(3)} Y${startPt.y.toFixed(3)}`);
+      }
+
+      const isBottomPass = (zVal <= targetDepth + tabHeight);
+      const shouldApplyTabs = useTabs && isClosed && isBottomPass && (itemStrategy === 'outside' || itemStrategy === 'on');
+      
+      let waypoints;
+      if (shouldApplyTabs) {
+        waypoints = generateContourWithTabs(loop, { enabled: true, count: tabCount, width: tabWidth, height: tabHeight }, zVal, targetDepth);
+      } else if (useRamping && isClosed && itemStrategy !== 'pocket') {
+        waypoints = generateRampedPass(loop, prevZ, zVal, rampAngle, rampMaxLen);
+      } else {
+        waypoints = loop.map(p => ({ x: p.x, y: p.y, z: zVal }));
+      }
+
+      gcode.push(`G1 Z${waypoints[0].z.toFixed(3)} F${feedZ.toFixed(0)}`);
+
+      for (let i = 1; i < waypoints.length; i++) {
+        const prev = waypoints[i - 1];
+        const curr = waypoints[i];
+
+        if (Math.abs(curr.z - prev.z) > 1e-4) {
+          if (curr.z > prev.z) {
+            gcode.push(`G1 Z${curr.z.toFixed(3)} F${feedZ.toFixed(0)} (Subida Aba)`);
+            gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)}`);
+          } else if (shouldApplyTabs) {
+            gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)}`);
+            gcode.push(`G1 Z${curr.z.toFixed(3)} F${feedZ.toFixed(0)} (Descida Corte)`);
+          } else {
+            gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} Z${curr.z.toFixed(3)} F${feedXY.toFixed(0)} (Entrada em Rampa)`);
+          }
+        } else if (curr.isDogbone) {
+          gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)} (Alivio Dogbone)`);
+        } else {
+          gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)}`);
+        }
+      }
+    });
+
+    gcode.push(`G0 Z${safeZ.toFixed(3)}`);
+  });
+}
+
 /**
  * MOTOR CAM: Gera percursos em G-code e desenha visualização 3D simulada
  */
@@ -4736,386 +5630,262 @@ function generateGCode() {
       });
     }
 
-    // 4B. PROCESSAR GEOMETRIA DE CONTORNOS (Multi-Estratégia: Perfil, Desbaste / Pocket e Chanfro)
-    // Expandir grupos para garantir que contornos individuais (ex: perfil exterior vs cavidades de DXF)
-    // sejam processados com a sua estratégia específica (obj.camStrategy ou global)
-    const contourItems = [];
-    contourObjects.forEach(obj => {
-      if (obj.type === 'group' && obj.getObjects) {
-        const groupMatrix = obj.calcTransformMatrix();
-        const children = obj.getObjects();
-        children.forEach(child => {
-          contourItems.push({
-            obj: child,
-            parentGroup: obj,
-            groupMatrix: groupMatrix,
-            camStrategy: child.camStrategy || obj.camStrategy || strategy
-          });
-        });
-      } else {
-        contourItems.push({
-          obj: obj,
-          parentGroup: null,
-          groupMatrix: null,
-          camStrategy: obj.camStrategy || strategy
-        });
-      }
-    });
+    // 4B. PROCESSAR GEOMETRIA DE CONTORNOS (Multi-Operação com Ordens de Trabalho ou Modo Direto)
+    const activeOps = camOperations.filter(op => op.enabled);
 
-    // Ordenação Inteligente de Maquinação CNC:
-    // 1. POCKET: Desbaste de cavidades e caixas interiores
-    // 2. INSIDE: Furos e perfis internos
-    // 3. ON: Gravação e detalhe sobre a linha
-    // 4. CHAMFER: Chanfro das arestas (realizado após o desbaste)
-    // 5. OUTSIDE: Recorte do perfil exterior da peça
-    const strategyPriority = {
-      pocket: 10,
-      inside: 20,
-      on: 30,
-      chamfer: 40,
-      outside: 50
-    };
-    contourItems.sort((a, b) => {
-      const pA = strategyPriority[a.camStrategy] || 25;
-      const pB = strategyPriority[b.camStrategy] || 25;
-      return pA - pB;
-    });
+    if (activeOps.length > 0) {
+      // === MODO CAM MULTI-OPERAÇÃO (ORDENS DE TRABALHO) ===
+      let lastToolName = null;
+      let lastSpindle = null;
 
-    let lastOperationStrategy = null;
+      activeOps.forEach((op, opIdx) => {
+        const opTool = op.tool || {};
+        const opParams = op.params || {};
+        const opStrategy = op.strategy || 'outside';
+        const toolDia = opTool.dia || 3.175;
+        const toolRadius = toolDia / 2;
+        const toolName = opTool.name || 'Fresa Topo Plano 3.175mm';
+        const spindleSpeed = opTool.spindle || 18000;
+        const feedXY = opTool.feedXY || 1400;
+        const feedZ = opTool.feedZ || 400;
+        const safeZ = (opParams.safeZ !== undefined) ? opParams.safeZ : 5.0;
+        const depthTotal = (opParams.depthTotal !== undefined) ? opParams.depthTotal : -3.0;
+        const depthPass = (opParams.depthPass !== undefined) ? opParams.depthPass : 1.0;
+        const stepover = (opParams.stepover !== undefined) ? opParams.stepover : 40;
 
-    contourItems.forEach((item) => {
-      const obj = item.obj;
-      const curStrategy = item.camStrategy || strategy;
+        // Validação de segurança de profundidade por ordem
+        if (Math.abs(depthTotal) > materialZ) {
+          console.warn(`Aviso de segurança: Ordem "${op.name}" excede a espessura do material (${materialZ} mm).`);
+        }
 
-      if (curStrategy !== lastOperationStrategy) {
-        lastOperationStrategy = curStrategy;
-        const stratLabel = getStrategyLabel(curStrategy).toUpperCase();
+        // Parâmetros de Chanfro
+        const chamferWidth = (opParams.chamferWidth !== undefined) ? opParams.chamferWidth : 1.0;
+        const chamferAngle = (opParams.chamferAngle !== undefined) ? opParams.chamferAngle : 90;
+        const chamferSide = opParams.chamferSide || 'outside';
+        const chamferTipOffset = (opParams.chamferTipOffset !== undefined) ? opParams.chamferTipOffset : 0.5;
+
+        const halfAngleRad = (chamferAngle / 2) * (Math.PI / 180);
+        const tanHalf = Math.tan(halfAngleRad) || 1.0;
+        const chamferZCut = -(chamferWidth / tanHalf + chamferTipOffset);
+        let chamferOffset = 0;
+        if (chamferSide === 'outside') chamferOffset = chamferTipOffset * tanHalf;
+        else if (chamferSide === 'inside') chamferOffset = -(chamferTipOffset * tanHalf);
+
+        // Abas de Retenção (Tabs)
+        const useTabs = !!opParams.useTabs;
+        const tabCount = opParams.tabCount || 4;
+        const tabWidth = opParams.tabWidth || 5.0;
+        const tabHeight = opParams.tabHeight || 1.5;
+
+        // Dogbone & Ramping
+        const useDogbone = !!opParams.useDogbone;
+        const dogboneType = opParams.dogboneType || 'dogbone';
+        const useRamping = !!opParams.useRamping;
+        const rampAngle = opParams.rampAngle || 10;
+        const rampMaxLen = opParams.rampMaxLen || 30;
+
+        const toolpathColor = op.color || getStrategyColor(opStrategy);
+
+        // Cabeçalho da Ordem de Trabalho
+        const stratLabel = getStrategyLabel(opStrategy).toUpperCase();
         gcode.push(`\n(========================================)`);
-        gcode.push(`( FASE CNC: ${stratLabel} )`);
+        gcode.push(`( ORDEM ${opIdx + 1}: ${op.name.toUpperCase()} )`);
+        gcode.push(`( ESTRATÉGIA: ${stratLabel} )`);
+        gcode.push(`( FERRAMENTA: ${toolName} [D=${toolDia}mm] )`);
+        gcode.push(`( PROFUNDIDADE TOTAL: ${depthTotal.toFixed(3)} mm | PASSO Z: ${depthPass.toFixed(3)} mm )`);
+        gcode.push(`( AVANÇO XY: ${feedXY} mm/min | AVANÇO Z: ${feedZ} mm/min )`);
+        gcode.push(`( ROTACAO: ${spindleSpeed} RPM )`);
         gcode.push(`(========================================)`);
-      }
-      const matrix = item.parentGroup 
-        ? fabric.util.multiplyTransformMatrices(item.groupMatrix, obj.calcTransformMatrix())
-        : obj.calcTransformMatrix();
 
-      let subpaths = [];
-
-      // --- CASO 1: RETÂNGULO ---
-      if (obj.type === 'rect') {
-        const hw = obj.width / 2;
-        const hh = obj.height / 2;
-        const pts = [
-          { x: -hw, y: -hh }, { x: hw, y: -hh }, { x: hw, y: hh }, { x: -hw, y: hh }, { x: -hw, y: -hh }
-        ].map(p => fabric.util.transformPoint(new fabric.Point(p.x, p.y), matrix));
-        pts.camStrategy = curStrategy;
-        subpaths.push(pts);
-      }
-      // --- CASO 2: CÍRCULO ---
-      else if (obj.type === 'circle') {
-        const scaleFactor = (obj.scaleX || 1) * (item.parentGroup ? (item.parentGroup.scaleX || 1) : 1);
-        const radius = obj.radius * scaleFactor;
-        const localCenter = obj.getCenterPoint();
-        const center = item.parentGroup 
-          ? fabric.util.transformPoint(localCenter, item.groupMatrix)
-          : localCenter;
-        const useArcs = paramUseArcs ? paramUseArcs.checked : true;
-
-        const steps = 64;
-        const pts = [];
-        for (let i = 0; i <= steps; i++) {
-          const theta = (i / steps) * 2 * Math.PI;
-          const px = center.x + radius * Math.cos(theta);
-          const py = center.y + radius * Math.sin(theta);
-          pts.push({ x: px, y: py });
+        // Notificação e paragem opcional de Troca de Ferramenta
+        if (lastToolName && lastToolName !== toolName) {
+          gcode.push(`M5`);
+          gcode.push(`G0 Z${safeZ.toFixed(3)}`);
+          gcode.push(`( --- TROCA DE FERRAMENTA --- )`);
+          gcode.push(`( Inserir: ${toolName} )`);
+          gcode.push(`M0 (Trocar para: ${toolName})`);
         }
-        pts.camStrategy = curStrategy;
+        lastToolName = toolName;
 
-        if (useArcs) {
-          subpaths.push({
-            isArcCircle: true,
-            center,
-            radius,
-            visualPoints: pts,
-            camStrategy: curStrategy
-          });
-        } else {
-          subpaths.push(pts);
-        }
-      }
-      // --- CASO 3: LINHA ---
-      else if (obj.type === 'line') {
-        const lp = obj.calcLinePoints();
-        const pts = [
-          fabric.util.transformPoint(new fabric.Point(lp.x1, lp.y1), matrix),
-          fabric.util.transformPoint(new fabric.Point(lp.x2, lp.y2), matrix)
-        ];
-        pts.camStrategy = curStrategy;
-        subpaths.push(pts);
-      }
-      // --- CASO 4: PATH / SVG ---
-      else {
-        const svgNS = "http://www.w3.org/2000/svg";
-        const tempSvg = document.createElementNS(svgNS, "svg");
-        document.body.appendChild(tempSvg);
-
-        const dStrings = [];
-        if (obj.type === 'path') {
-          const pathCommands = obj.path;
-          let currentD = [];
-          for (let c = 0; c < pathCommands.length; c++) {
-            const cmd = pathCommands[c];
-            if ((cmd[0] === 'M' || cmd[0] === 'm') && currentD.length > 0) {
-              dStrings.push(currentD.map(p => p.join(' ')).join(' '));
-              currentD = [];
-            }
-            currentD.push(cmd);
-          }
-          if (currentD.length > 0) {
-            dStrings.push(currentD.map(p => p.join(' ')).join(' '));
-          }
-        } else {
-          const svgString = obj.toSVG();
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(svgString, 'image/svg+xml');
-          const paths = doc.querySelectorAll('path');
-          paths.forEach(p => {
-            const d = p.getAttribute('d');
-            if (d && d.trim()) dStrings.push(d.trim());
-          });
+        if (lastSpindle !== spindleSpeed) {
+          gcode.push(`M3 S${spindleSpeed.toFixed(0)}`);
+          gcode.push(`G4 P1.5`);
+          lastSpindle = spindleSpeed;
         }
 
-        const offX = (obj.type === 'path' && obj.pathOffset) ? obj.pathOffset.x : 0;
-        const offY = (obj.type === 'path' && obj.pathOffset) ? obj.pathOffset.y : 0;
+        gcode.push(`G0 Z${safeZ.toFixed(3)}`);
 
-        dStrings.forEach(dStr => {
-          if (!dStr.trim()) return;
-          const tempPath = document.createElementNS(svgNS, "path");
-          tempPath.setAttribute('d', dStr);
-          tempSvg.appendChild(tempPath);
-          try {
-            const totalLength = tempPath.getTotalLength();
-            if (totalLength > 0.05) {
-              const stepSize = 2; // 1mm em px (ESCALA_MM_PX = 2)
-              const numPoints = Math.max(12, Math.ceil(totalLength / stepSize));
-              const pts = [];
-              for (let i = 0; i <= numPoints; i++) {
-                const dist = (i / numPoints) * totalLength;
-                const pt = tempPath.getPointAtLength(dist);
-                const transformedPt = fabric.util.transformPoint(new fabric.Point(pt.x - offX, pt.y - offY), matrix);
-                pts.push(transformedPt);
-              }
-              if (pts.length > 0) {
-                pts.camStrategy = curStrategy;
-                subpaths.push(pts);
-              }
-            }
-          } catch (e) {
-            console.warn("Erro ao ler subpath SVG:", e);
-          } finally {
-            tempSvg.removeChild(tempPath);
-          }
-        });
+        // Obter objetos associados a esta ordem
+        const targetObjects = getObjectsForOperation(op);
+        if (targetObjects.length === 0) return;
 
-        document.body.removeChild(tempSvg);
-      }
-
-      // Processar cada subpath aplicando a respetiva Estratégia CAM
-      subpaths.forEach(subItem => {
-        const itemStrategy = (subItem && subItem.camStrategy) || curStrategy;
-
-        // Determinar cor da trajetória visual correspondente à estratégia
-        let toolpathColor = '#38bdf8'; // Azul ciano padrão
-        if (itemStrategy === 'pocket') {
-          toolpathColor = '#10b981'; // Verde esmeralda para desbaste
-        } else if (itemStrategy === 'chamfer') {
-          toolpathColor = '#a855f7'; // Roxo para chanfro
-        } else if (itemStrategy === 'inside') {
-          toolpathColor = '#f59e0b'; // Âmbar para corte interior
-        } else if (itemStrategy === 'on') {
-          toolpathColor = '#ec4899'; // Rosa para sobre a linha
-        }
-
-        // 1. CÍRCULO COM ARCOS NATIVOS G2 (quando tabs não estão activos e não é pocket)
-        if (subItem && subItem.isArcCircle && !useTabs && itemStrategy !== 'pocket') {
-          const { center, radius } = subItem;
-
-          const cxMM = (center.x / ESCALA_MM_PX) - wcsX;
-          const cyMM = ((canvas.height - center.y) / ESCALA_MM_PX) - wcsY;
-          const rBaseMM = radius / ESCALA_MM_PX;
-
-          let rCut = rBaseMM;
-          let targetDepth = depthTotal;
-          if (itemStrategy === 'outside') {
-            rCut = rBaseMM + toolRadius;
-          } else if (itemStrategy === 'inside') {
-            rCut = Math.max(0.1, rBaseMM - toolRadius);
-          } else if (itemStrategy === 'chamfer') {
-            targetDepth = chamferZCut;
-            rCut = Math.max(0.1, rBaseMM + chamferOffset);
-          }
-
-          // Amostragem para renderização visual no canvas 2D
-          const visPts = [];
-          for (let i = 0; i <= 64; i++) {
-            const theta = (i / 64) * 2 * Math.PI;
-            visPts.push({
-              x: (cxMM + rCut * Math.cos(theta) + wcsX) * ESCALA_MM_PX,
-              y: canvas.height - ((cyMM + rCut * Math.sin(theta) + wcsY) * ESCALA_MM_PX)
+        // Decompor grupos e extrair contornos
+        const contourItems = [];
+        targetObjects.forEach(obj => {
+          if (obj.type === 'group' && obj.getObjects) {
+            const groupMatrix = obj.calcTransformMatrix();
+            const children = obj.getObjects();
+            children.forEach(child => {
+              contourItems.push({
+                obj: child,
+                parentGroup: obj,
+                groupMatrix: groupMatrix,
+                camStrategy: opStrategy
+              });
+            });
+          } else {
+            contourItems.push({
+              obj: obj,
+              parentGroup: null,
+              groupMatrix: null,
+              camStrategy: opStrategy
             });
           }
-          toolpathsToVisualise.push({ points: visPts, color: toolpathColor });
-
-          const startX = cxMM - rCut;
-          const startY = cyMM;
-
-          const zPasses = [];
-          let currentZ = -depthPass;
-          while (currentZ > targetDepth) {
-            zPasses.push(currentZ);
-            currentZ -= depthPass;
-          }
-          zPasses.push(targetDepth);
-
-          gcode.push(`G0 Z${safeZ.toFixed(3)}`);
-          gcode.push(`G0 X${startX.toFixed(3)} Y${startY.toFixed(3)}`);
-
-          zPasses.forEach((zVal) => {
-            gcode.push(`G1 Z${zVal.toFixed(3)} F${feedZ.toFixed(0)}`);
-            gcode.push(`G2 X${(cxMM + rCut).toFixed(3)} Y${cyMM.toFixed(3)} I${rCut.toFixed(3)} J0.000 F${feedXY.toFixed(0)}`);
-            gcode.push(`G2 X${(cxMM - rCut).toFixed(3)} Y${cyMM.toFixed(3)} I${(-rCut).toFixed(3)} J0.000 F${feedXY.toFixed(0)}`);
-          });
-
-          gcode.push(`G0 Z${safeZ.toFixed(3)}`);
-          return;
-        }
-
-        // 2. CONTORNOS POLIGONAIS, RETÂNGULOS, DXF E SVGs
-        const rawPoints = (subItem && subItem.isArcCircle) ? subItem.visualPoints : (subItem.points || subItem);
-        if (!rawPoints || rawPoints.length < 2) return;
-
-        // Converter pontos em coordenadas físicas de maquinação (mm)
-        const mmPoints = rawPoints.map(pt => ({
-          x: (pt.x / ESCALA_MM_PX) - wcsX,
-          y: ((canvas.height - pt.y) / ESCALA_MM_PX) - wcsY
-        }));
-
-        const isClosed = Math.hypot(mmPoints[0].x - mmPoints[mmPoints.length - 1].x,
-                                    mmPoints[0].y - mmPoints[mmPoints.length - 1].y) < 0.1;
-
-        // Gerar os laços de corte (loops) consoante a estratégia seleccionada
-        let loopsToCut = [];
-        let targetDepth = depthTotal;
-
-        if (itemStrategy === 'chamfer') {
-          targetDepth = chamferZCut;
-          if (!isClosed || Math.abs(chamferOffset) < 1e-4) {
-            loopsToCut = [mmPoints];
-          } else {
-            loopsToCut = offsetContour(mmPoints, chamferOffset);
-            if (!loopsToCut || loopsToCut.length === 0) loopsToCut = [mmPoints];
-          }
-        } else if (!isClosed || itemStrategy === 'on') {
-          loopsToCut = [mmPoints];
-        } else if (itemStrategy === 'outside') {
-          loopsToCut = offsetContour(mmPoints, toolRadius);
-        } else if (itemStrategy === 'inside') {
-          loopsToCut = offsetContour(mmPoints, -toolRadius);
-        } else if (itemStrategy === 'pocket') {
-          // Desbaste Concêntrico Total de Caixa / Cavidade
-          loopsToCut = generatePocketToolpaths(mmPoints, toolDia, stepover);
-          if (!loopsToCut || loopsToCut.length === 0) loopsToCut = [mmPoints];
-        }
-
-        // REA FreeCAD DogboneII & Vectric VCarve:
-        // Se ativado, aplicar alívios de cantos nos cantos internos (apenas em corte de perfil)
-        const useDogbone = paramUseDogbone && paramUseDogbone.checked;
-        const dogboneType = paramDogboneType ? paramDogboneType.value : 'dogbone';
-        if (useDogbone && isClosed && itemStrategy !== 'chamfer' && itemStrategy !== 'pocket') {
-          loopsToCut = loopsToCut.map(l => applyDogboneRelief(l, toolRadius, dogboneType, itemStrategy));
-        }
-
-        // Visualização 2D no Canvas com cores específicas por estratégia
-        loopsToCut.forEach(loop => {
-          const vis = loop.map(p => ({
-            x: (p.x + wcsX) * ESCALA_MM_PX,
-            y: canvas.height - ((p.y + wcsY) * ESCALA_MM_PX)
-          }));
-          toolpathsToVisualise.push({ points: vis, color: toolpathColor });
         });
 
-        // Passagens verticais de descida Z
-        const zPasses = [];
-        let currentZ = -depthPass;
-        while (currentZ > targetDepth) {
-          zPasses.push(currentZ);
-          currentZ -= depthPass;
-        }
-        zPasses.push(targetDepth);
+        const opSettings = {
+          toolDia,
+          toolRadius,
+          safeZ,
+          feedXY,
+          feedZ,
+          depthTotal,
+          depthPass,
+          stepover,
+          chamferZCut,
+          chamferOffset,
+          useTabs,
+          tabCount,
+          tabWidth,
+          tabHeight,
+          useDogbone,
+          dogboneType,
+          useRamping,
+          rampAngle,
+          rampMaxLen,
+          wcsX,
+          wcsY,
+          toolpathColor
+        };
 
-        const useRamping = paramUseRamping && paramUseRamping.checked;
-        const rampAngle = paramRampAngle ? parseFloat(paramRampAngle.value) || 10 : 10;
-        const rampMaxLen = paramRampMaxLen ? parseFloat(paramRampMaxLen.value) || 30 : 30;
-
-        // Executar corte para cada laço gerado
-        loopsToCut.forEach((loop) => {
-          if (!loop || loop.length < 2) return;
-          const startPt = loop[0];
-
-          gcode.push(`G0 Z${safeZ.toFixed(3)}`);
-          gcode.push(`G0 X${startPt.x.toFixed(3)} Y${startPt.y.toFixed(3)}`);
-
-          zPasses.forEach((zVal, pIdx) => {
-            const prevZ = (pIdx === 0) ? 0 : zPasses[pIdx - 1];
-
-            if (!isClosed && pIdx > 0) {
-              gcode.push(`G0 Z${safeZ.toFixed(3)}`);
-              gcode.push(`G0 X${startPt.x.toFixed(3)} Y${startPt.y.toFixed(3)}`);
-            }
-
-            const isBottomPass = (zVal <= targetDepth + tabHeight);
-            // Aplicar Holding Tabs apenas no contorno exterior ou sobre a linha (não em pocket nem chanfro)
-            const shouldApplyTabs = useTabs && isClosed && isBottomPass && (itemStrategy === 'outside' || itemStrategy === 'on');
-            
-            let waypoints;
-            if (shouldApplyTabs) {
-              waypoints = generateContourWithTabs(loop, { enabled: true, count: tabCount, width: tabWidth, height: tabHeight }, zVal, targetDepth);
-            } else if (useRamping && isClosed && itemStrategy !== 'pocket') {
-              waypoints = generateRampedPass(loop, prevZ, zVal, rampAngle, rampMaxLen);
-            } else {
-              waypoints = loop.map(p => ({ x: p.x, y: p.y, z: zVal }));
-            }
-
-            // Posicionar no início Z da passagem
-            gcode.push(`G1 Z${waypoints[0].z.toFixed(3)} F${feedZ.toFixed(0)}`);
-
-            // Corte em avanço XY / XYZ
-            for (let i = 1; i < waypoints.length; i++) {
-              const prev = waypoints[i - 1];
-              const curr = waypoints[i];
-
-              if (Math.abs(curr.z - prev.z) > 1e-4) {
-                if (curr.z > prev.z) {
-                  gcode.push(`G1 Z${curr.z.toFixed(3)} F${feedZ.toFixed(0)} (Subida Aba)`);
-                  gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)}`);
-                } else if (shouldApplyTabs) {
-                  gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)}`);
-                  gcode.push(`G1 Z${curr.z.toFixed(3)} F${feedZ.toFixed(0)} (Descida Corte)`);
-                } else {
-                  // Rampa 3D inclinada contínua (movimento simultâneo XYZ)
-                  gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} Z${curr.z.toFixed(3)} F${feedXY.toFixed(0)} (Entrada em Rampa)`);
-                }
-              } else if (curr.isDogbone) {
-                gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)} (Alivio Dogbone)`);
-              } else {
-                gcode.push(`G1 X${curr.x.toFixed(3)} Y${curr.y.toFixed(3)} F${feedXY.toFixed(0)}`);
-              }
-            }
+        contourItems.forEach(item => {
+          const subpaths = extractSubpathsFromObject(item.obj, item.parentGroup, item.groupMatrix, opStrategy);
+          subpaths.forEach(subItem => {
+            processSubpathToolpath(subItem, opStrategy, opSettings, gcode, toolpathsToVisualise);
           });
-
-          gcode.push(`G0 Z${safeZ.toFixed(3)}`);
         });
       });
-    });
+    } else if (contourObjects.length > 0) {
+      // === MODO B: COMPATIBILIDADE / MODO DIRETO (SEM ORDENS CRIADAS) ===
+      const toolDia = parseCAMParam(inputToolDia, 3.175);
+      const safeZ = parseCAMParam(inputSafeZ, 5.0);
+      const feedXY = parseCAMParam(inputFeedXY, 1400);
+      const feedZ = parseCAMParam(inputFeedZ, 400);
+      const depthTotal = parseCAMParam(inputDepthTotal, -3.0);
+      const depthPass = parseCAMParam(inputDepthPass, 1.0);
+      const spindleSpeed = parseCAMParam(inputSpindleSpeed, 18000);
+      const strategy = selectStrategy ? selectStrategy.value : 'outside';
+      const toolRadius = toolDia / 2;
+      const stepover = inputStepover ? (parseFloat(inputStepover.value) || 40) : 40;
+
+      // Parâmetros de Chanfro
+      const chamferWidth = inputChamferWidth ? (parseFloat(inputChamferWidth.value) || 1.0) : 1.0;
+      const chamferAngle = paramChamferAngle ? (parseFloat(paramChamferAngle.value) || 90) : 90;
+      const chamferSide = paramChamferSide ? paramChamferSide.value : 'outside';
+      const chamferTipOffset = paramChamferTipOffset ? (parseFloat(paramChamferTipOffset.value) || 0.5) : 0.5;
+
+      const halfAngleRad = (chamferAngle / 2) * (Math.PI / 180);
+      const tanHalf = Math.tan(halfAngleRad) || 1.0;
+      const chamferZCut = -(chamferWidth / tanHalf + chamferTipOffset);
+      let chamferOffset = 0;
+      if (chamferSide === 'outside') chamferOffset = chamferTipOffset * tanHalf;
+      else if (chamferSide === 'inside') chamferOffset = -(chamferTipOffset * tanHalf);
+
+      const useTabs = paramUseTabs ? paramUseTabs.checked : false;
+      const tabCount = paramTabCount ? (parseInt(paramTabCount.value, 10) || 4) : 4;
+      const tabWidth = paramTabWidth ? (parseFloat(paramTabWidth.value) || 5.0) : 5.0;
+      const tabHeight = paramTabHeight ? (parseFloat(paramTabHeight.value) || 1.5) : 1.5;
+
+      const useDogbone = paramUseDogbone && paramUseDogbone.checked;
+      const dogboneType = paramDogboneType ? paramDogboneType.value : 'dogbone';
+      const useRamping = paramUseRamping && paramUseRamping.checked;
+      const rampAngle = paramRampAngle ? parseFloat(paramRampAngle.value) || 10 : 10;
+      const rampMaxLen = paramRampMaxLen ? parseFloat(paramRampMaxLen.value) || 30 : 30;
+
+      gcode.push(`M3 S${spindleSpeed.toFixed(0)}`);
+      gcode.push(`G4 P1.5`);
+      gcode.push(`G0 Z${safeZ.toFixed(3)}`);
+
+      const contourItems = [];
+      contourObjects.forEach(obj => {
+        if (obj.type === 'group' && obj.getObjects) {
+          const groupMatrix = obj.calcTransformMatrix();
+          const children = obj.getObjects();
+          children.forEach(child => {
+            contourItems.push({
+              obj: child,
+              parentGroup: obj,
+              groupMatrix: groupMatrix,
+              camStrategy: child.camStrategy || obj.camStrategy || strategy
+            });
+          });
+        } else {
+          contourItems.push({
+            obj: obj,
+            parentGroup: null,
+            groupMatrix: null,
+            camStrategy: obj.camStrategy || strategy
+          });
+        }
+      });
+
+      const strategyPriority = { pocket: 10, inside: 20, on: 30, chamfer: 40, outside: 50 };
+      contourItems.sort((a, b) => {
+        return (strategyPriority[a.camStrategy] || 25) - (strategyPriority[b.camStrategy] || 25);
+      });
+
+      let lastStrat = null;
+      contourItems.forEach(item => {
+        const curStrat = item.camStrategy || strategy;
+        if (curStrat !== lastStrat) {
+          lastStrat = curStrat;
+          const stratLabel = getStrategyLabel(curStrat).toUpperCase();
+          gcode.push(`\n(========================================)`);
+          gcode.push(`( FASE CNC: ${stratLabel} )`);
+          gcode.push(`(========================================)`);
+        }
+
+        const opSettings = {
+          toolDia,
+          toolRadius,
+          safeZ,
+          feedXY,
+          feedZ,
+          depthTotal,
+          depthPass,
+          stepover,
+          chamferZCut,
+          chamferOffset,
+          useTabs,
+          tabCount,
+          tabWidth,
+          tabHeight,
+          useDogbone,
+          dogboneType,
+          useRamping,
+          rampAngle,
+          rampMaxLen,
+          wcsX,
+          wcsY,
+          toolpathColor: getStrategyColor(curStrat)
+        };
+
+        const subpaths = extractSubpathsFromObject(item.obj, item.parentGroup, item.groupMatrix, curStrat);
+        subpaths.forEach(subItem => {
+          processSubpathToolpath(subItem, curStrat, opSettings, gcode, toolpathsToVisualise);
+        });
+      });
+    }
 
     // 5. Rodapé Final do G-code (Paragem do Router CNC)
     gcode.push(`G0 Z${safeZ.toFixed(3)}`);
@@ -5123,9 +5893,9 @@ function generateGCode() {
     gcode.push(`G0 X0 Y0`);
     gcode.push(`M30`);
     
-    // Garantir G-code 100% limpo sem quaisquer comentários (; ou ()) nem linhas vazias
+    // Garantir G-code limpo mantendo comentários explicativos e cabeçalhos de ordens CAM
     const cleanGCode = gcode
-      .map(line => line.split(';')[0].replace(/\(.*?\)/g, '').trim())
+      .map(line => line.trim())
       .filter(line => line.length > 0)
       .join('\n');
 
@@ -6169,7 +6939,7 @@ async function saveAppState() {
   // Serialização limpa dos desenhos vectoriais normais sem fugas de memória
   const vectorObjects = rawObjects.filter(obj => !obj.isReliefImage);
   const canvasJsonData = {
-    objects: vectorObjects.map(obj => obj.toObject(['selectable', 'evented', 'stroke', 'strokeWidth']))
+    objects: vectorObjects.map(obj => obj.toObject(['selectable', 'evented', 'stroke', 'strokeWidth', 'uid', 'layerName', 'camStrategy']))
   };
 
   const appState = {
@@ -6177,6 +6947,7 @@ async function saveAppState() {
     lastModified: new Date().toLocaleString(),
     canvasData: canvasJsonData,
     reliefs: reliefMetadata,
+    camOperations: camOperations,
     cncParams: {
       toolDia: parseFloat(inputToolDia.value),
       safeZ: parseFloat(inputSafeZ.value),
@@ -6293,6 +7064,7 @@ async function loadAppState() {
             obj.perPixelTargetFind = true;
             obj.targetFindTolerance = 8;
             obj.strokeUniform = true;
+            ensureObjectUid(obj);
             if (obj.camStrategy) {
               applyStrategyToObject(obj, obj.camStrategy);
             }
@@ -6342,11 +7114,17 @@ async function loadAppState() {
         }
       }
     }
+
+    // 4. Restaurar Ordens de Trabalho CAM
+    if (appState.camOperations && Array.isArray(appState.camOperations)) {
+      camOperations = appState.camOperations;
+    }
   } catch (err) {
     console.error("Erro ao restaurar o estado:", err);
   } finally {
     isRestoringState = false;
     renderLayersAndVectorsList();
+    renderOperationsList();
   }
 }
 
@@ -7240,7 +8018,7 @@ function setupPWAInstall() {
 /**
  * Gestão de Atualizações PWA (Update Popup & Service Worker Lifecycle)
  */
-const CURRENT_APP_VERSION = '0.10.2';
+const CURRENT_APP_VERSION = '0.11.0';
 let waitingServiceWorker = null;
 let updatePopupEl = null;
 let updateModalEl = null;
@@ -7250,7 +8028,7 @@ let btnVersionBadgeEl = null;
  * Exibe o Popup Flutuante de Atualização Disponível
  * Suporta tanto o modo de notificação de nova versão ativa como o modo de atualização pendente do SW
  */
-function showUpdatePopup(versionStr = 'v0.10.2', options = {}) {
+function showUpdatePopup(versionStr = 'v0.11.0', options = {}) {
   if (!updatePopupEl) updatePopupEl = document.getElementById('update-popup');
   if (btnVersionBadgeEl) btnVersionBadgeEl.classList.add('update-ready');
 
@@ -7263,9 +8041,9 @@ function showUpdatePopup(versionStr = 'v0.10.2', options = {}) {
 
   if (options.isNewVersionNotice) {
     if (titleEl) titleEl.textContent = options.title || `🎉 Versão ${versionStr} Ativa!`;
-    if (descEl) descEl.textContent = options.desc || 'O Gcoded foi atualizado com motor DXF de alta precisão (sem distorções em arcos/bulges) e ClipperLib 2D.';
+    if (descEl) descEl.textContent = options.desc || 'O Gcoded v0.11.0 introduz o Gestor de Ordens de Trabalho CAM: cria múltiplos percursos (Desbaste, Chanfro, Recorte) nos mesmos vetores sem duplicar linhas!';
     if (btnNow) {
-      btnNow.innerHTML = '<span>👍 Explorar v0.10.2</span>';
+      btnNow.innerHTML = '<span>👍 Explorar v0.11.0</span>';
       btnNow.onclick = () => {
         localStorage.setItem('gcoded_viewed_version', CURRENT_APP_VERSION);
         hideUpdatePopup();
@@ -7463,8 +8241,8 @@ function registerServiceWorker() {
     if (lastSeenVer !== CURRENT_APP_VERSION) {
       showUpdatePopup(`v${CURRENT_APP_VERSION}`, {
         isNewVersionNotice: true,
-        title: '🎉 Bem-vindo ao Gcoded v0.10.2!',
-        desc: 'Motor DXF corrigido com descodificação exata de arcos e bulges (zero inversões), além de ClipperLib e Dogbone.'
+        title: '🎉 Bem-vindo ao Gcoded v0.11.0!',
+        desc: 'Gestor de Ordens de Trabalho CAM: agora podes associar múltiplos percursos (Desbaste, Chanfro, Recorte) aos mesmos vetores sem duplicar linhas no desenho!'
       });
     }
   }, 800);

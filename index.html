@@ -100,9 +100,9 @@
 
       <!-- Cluster 4: Sistema / PWA -->
       <div class="install-group" style="display: flex; gap: 0.45rem; align-items: center;">
-        <button id="btn-version-badge" class="action-btn version-badge-btn" title="Gcoded CAM v0.10.10 - Clica para ver notas de versão">
+        <button id="btn-version-badge" class="action-btn version-badge-btn" title="Gcoded CAM v0.11.0 - Clica para ver notas de versão">
           <span class="icon">🚀</span>
-          <span id="version-badge-text">v0.10.10</span>
+          <span id="version-badge-text">v0.11.0</span>
           <span id="version-pulse-dot" class="version-dot"></span>
         </button>
         <button id="btn-install-app" class="action-btn install-btn" title="Instalar Gcoded no computador ou telemóvel para acesso 100% offline">
@@ -212,6 +212,44 @@
 
         <!-- Conteúdo do Separador 1: Percursos CAM -->
         <div id="sidebar-content-cam" class="sidebar-tab-content active">
+          <!-- Painel Gestor de Ordens de Trabalho (Percursos CAM) -->
+          <div class="panel-section work-orders-panel" id="panel-work-orders">
+            <div class="section-title-row">
+              <div style="display: flex; align-items: center; gap: 0.45rem;">
+                <span style="font-size: 1.15rem;">📋</span>
+                <h2>Ordens de Trabalho CAM</h2>
+              </div>
+              <span id="operations-count-badge" class="badge-subtle">0 ordens</span>
+            </div>
+
+            <p style="font-size: 0.74rem; color: #94a3b8; margin: 0.15rem 0 0.55rem 0; line-height: 1.35;">
+              Cria percursos para os contornos. Um mesmo contorno pode ter várias ordens (ex: Desbaste no interior + Chanfro na aresta).
+            </p>
+
+            <div style="display: flex; gap: 0.4rem; margin-bottom: 0.55rem;">
+              <button type="button" id="btn-add-operation" class="primary-btn btn-add-op" style="flex: 1; padding: 0.55rem 0.6rem; font-size: 0.82rem; background: linear-gradient(135deg, #0284c7, #2563eb); font-weight: 600; white-space: nowrap;" title="Criar uma nova Ordem de Trabalho para a seleção atual com a estratégia e parâmetros abaixo">
+                ➕ Criar Ordem para Seleção
+              </button>
+            </div>
+
+            <!-- Banner Informativo quando uma ordem está em edição ativa -->
+            <div id="editing-op-banner" class="editing-op-banner" style="display: none;">
+              <div class="editing-banner-content">
+                <span class="editing-icon">✏️</span>
+                <span id="editing-op-title" class="editing-title">A editar Ordem 1</span>
+              </div>
+              <div class="editing-banner-actions">
+                <button type="button" id="btn-save-editing-op" class="op-mini-btn save-btn" title="Guardar alterações dos parâmetros nesta ordem">💾 Guardar</button>
+                <button type="button" id="btn-cancel-editing-op" class="op-mini-btn cancel-btn" title="Fechar modo de edição">✕</button>
+              </div>
+            </div>
+
+            <!-- Lista Dinâmica de Ordens de Trabalho -->
+            <div id="operations-list" class="operations-list-container">
+              <!-- Renderizado dinamicamente via JavaScript -->
+            </div>
+          </div>
+
           <!-- Cartão de Estratégias Vectric -->
           <div class="panel-section">
             <div class="section-title-row">
@@ -1048,14 +1086,14 @@
         <div class="update-header-info">
           <div class="update-tag-row">
             <span class="update-badge">NOVA VERSÃO</span>
-            <span id="update-version-label" class="update-version-text">v0.10.10</span>
+            <span id="update-version-label" class="update-version-text">v0.11.0</span>
           </div>
           <h4 id="update-popup-title" class="update-title">Atualização Disponível!</h4>
         </div>
         <button id="btn-close-update-popup" class="update-close-btn" title="Lembrar mais tarde">✕</button>
       </div>
       <p id="update-popup-desc" class="update-desc">
-        Nova versão do Gcoded com correção crítica de alinhamento de trajetórias (zero offset em SVG/DXF) e duplicação exata na mesma coordenada sem deslocamento!
+        Nova versão do Gcoded v0.11.0 com Gestor de Ordens de Trabalho CAM: cria múltiplos percursos (Desbaste, Chanfro, Recorte) nos mesmos vetores sem duplicar linhas!
       </p>
       <div class="update-actions">
         <button id="btn-update-now" class="update-cta-btn">
@@ -1081,7 +1119,7 @@
           <div style="flex: 1;">
             <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.2rem;">
               <h3 style="margin: 0; color: #ffffff; font-size: 1.1rem;">Gcoded CAM Offline</h3>
-              <span class="update-badge" style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.4); color: #34d399;">v0.10.10</span>
+              <span class="update-badge" style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.4); color: #34d399;">v0.11.0</span>
             </div>
             <p style="margin: 0; font-size: 0.82rem; color: #94a3b8; line-height: 1.4;">
               A tua aplicação atualiza-se de forma autónoma através do Service Worker, preservando os teus desenhos e definições locais.
@@ -1093,8 +1131,18 @@
         <div class="update-changelog-list">
           <div class="changelog-item">
             <div class="changelog-header">
+              <span class="changelog-ver">v0.11.0</span>
+              <span class="changelog-tag" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">Atual</span>
+            </div>
+            <div class="changelog-title">📋 Gestor de Ordens de Trabalho CAM (Multi-Toolpath)</div>
+            <div class="changelog-body">
+              Criação e gestão de Ordens de Trabalho ("Percursos CAM"): associa múltiplas operações (Desbaste de cavidade, Chanfro na aresta, Recorte exterior com abas, Furações) ao mesmo vetor no desenho sem necessidade de duplicar linhas; lista interativa com ordenação ▲/▼, ativação individual [x], edição de parâmetros e compilação coordenada em G-code com aviso de troca de fresa.
+            </div>
+          </div>
+
+          <div class="changelog-item">
+            <div class="changelog-header">
               <span class="changelog-ver">v0.10.10</span>
-              <span class="changelog-tag" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">Atual</span>
             </div>
             <div class="changelog-title">🎯 Alinhamento Preciso de Trajetórias & Duplicação Exata</div>
             <div class="changelog-body">
@@ -1197,7 +1245,7 @@
     </div>
   </div>
 
-  <script type="module" src="./src/app.js?v=0.10.10"></script>
+  <script type="module" src="./src/app.js?v=0.11.0"></script>
 </body>
 
 </html>

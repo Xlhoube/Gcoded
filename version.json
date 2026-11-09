@@ -1,11 +1,12 @@
 {
-  "version": "0.10.10",
+  "version": "0.11.0",
   "name": "Gcoded CAM",
-  "build": "20261109-10",
-  "updatedAt": "2026-11-09T08:35:00Z",
+  "build": "20261109-11",
+  "updatedAt": "2026-11-09T08:55:00Z",
   "highlights": [
-    "🎯 Alinhamento Perfeito de Trajetórias (Zero Offset): Corrigida a transformação de coordenadas em geometrias SVG/DXF, garantindo que o desbaste e o chanfro coincidem 100% com o desenho original",
-    "📍 Duplicação Exata na Mesma Posição: Correção de coordenadas globais ao duplicar seleções múltiplas (evita deslocamento para o canto inferior direito)",
-    "⚙️ Sincronização Absoluta Canvas / G-code / Simulador 3D: Trajetórias 2D e código de máquina gerados exatamente onde o vetor se encontra na mesa"
+    "📋 Gestor de Ordens de Trabalho CAM (Work Orders): Permite associar múltiplas operações de fresagem (Desbaste, Chanfro, Recorte, Furação) ao mesmo vetor sem ter de duplicar linhas no desenho!",
+    "🔄 Reordenação e Ativação Rápida de Percursos: Controla a sequência de corte com botões ▲/▼, ativa/desativa operações com caixas de seleção e edita parâmetros individualmente",
+    "🎯 Sincronização e Seleção no Canvas: Botão para destacar no desenho quais os vetores de cada ordem e botão para atualizar a seleção atribuída com 1 clique",
+    "⚙️ Compilação Coordenada de G-code: Gera cabeçalhos por fase CNC com indicação de ordem, estratégia, ferramenta, profundidades e avisos de troca de fresa (M0)"
   ]
 }
