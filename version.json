@@ -1,12 +1,12 @@
 {
-  "version": "0.10.8",
+  "version": "0.10.9",
   "name": "Gcoded CAM",
-  "build": "20261109-08",
-  "updatedAt": "2026-11-09T08:22:00Z",
+  "build": "20261109-09",
+  "updatedAt": "2026-11-09T08:30:00Z",
   "highlights": [
-    "📑 Duplicação de Contorno no Mesmo Sítio (Ctrl+D): Aplica facilmente múltiplas operações CAM na mesma geometria (ex: Desbaste no interior + Chanfro na aresta)",
-    "⚙️ Sequenciamento Inteligente de Fases CNC: Ordenação automática de processos no G-code (1º Desbaste/Pocket, 2º Perfis interiores, 3º Gravação, 4º Chanfros, 5º Recorte exterior com tabs)",
-    "🏷️ Separadores de Operação no G-code: Comentários estruturados por fase de corte para melhor acompanhamento na máquina CNC",
-    "🔘 Acesso Rápido a Duplicação: Botão direto nas Ações Rápidas, no menu de clique direito e em cada cartão da Árvore de Vetores"
+    "🎨 Preenchimento Visual de Desbaste (Pocket): O interior da geometria fica preenchido a verde translúcido indicando a remoção de material da cavidade",
+    "📐 Visualização de Bisel para Chanfro: O contorno reflete a largura real do chanfro em mm e a sua projeção exterior ou interior com realce violeta",
+    "⚡ Atualização Dinâmica na Mesa: Alterar a largura do chanfro ou trocar de estratégia atualiza instantaneamente o aspeto do desenho no canvas",
+    "👀 Visualização Simultânea de Operações Combinadas: Permite ver perfeitamente o desbaste verde no interior e o chanfro violeta na aresta sobreposta"
   ]
 }

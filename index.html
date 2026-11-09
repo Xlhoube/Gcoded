@@ -100,9 +100,9 @@
 
       <!-- Cluster 4: Sistema / PWA -->
       <div class="install-group" style="display: flex; gap: 0.45rem; align-items: center;">
-        <button id="btn-version-badge" class="action-btn version-badge-btn" title="Gcoded CAM v0.10.8 - Clica para ver notas de versão">
+        <button id="btn-version-badge" class="action-btn version-badge-btn" title="Gcoded CAM v0.10.9 - Clica para ver notas de versão">
           <span class="icon">🚀</span>
-          <span id="version-badge-text">v0.10.8</span>
+          <span id="version-badge-text">v0.10.9</span>
           <span id="version-pulse-dot" class="version-dot"></span>
         </button>
         <button id="btn-install-app" class="action-btn install-btn" title="Instalar Gcoded no computador ou telemóvel para acesso 100% offline">
@@ -1048,14 +1048,14 @@
         <div class="update-header-info">
           <div class="update-tag-row">
             <span class="update-badge">NOVA VERSÃO</span>
-            <span id="update-version-label" class="update-version-text">v0.10.8</span>
+            <span id="update-version-label" class="update-version-text">v0.10.9</span>
           </div>
           <h4 id="update-popup-title" class="update-title">Atualização Disponível!</h4>
         </div>
         <button id="btn-close-update-popup" class="update-close-btn" title="Lembrar mais tarde">✕</button>
       </div>
       <p id="update-popup-desc" class="update-desc">
-        Nova versão do Gcoded com suporte a múltiplas operações no mesmo vetor: duplicação no mesmo sítio (Ctrl+D) para Chanfro e Desbaste, e sequenciamento inteligente de fases CNC no G-code!
+        Nova versão do Gcoded com pré-visualização gráfica realista: desbaste com interior preenchido a verde e chanfro com bisel violeta exterior ou interior em tempo real!
       </p>
       <div class="update-actions">
         <button id="btn-update-now" class="update-cta-btn">
@@ -1081,7 +1081,7 @@
           <div style="flex: 1;">
             <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.2rem;">
               <h3 style="margin: 0; color: #ffffff; font-size: 1.1rem;">Gcoded CAM Offline</h3>
-              <span class="update-badge" style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.4); color: #34d399;">v0.10.8</span>
+              <span class="update-badge" style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.4); color: #34d399;">v0.10.9</span>
             </div>
             <p style="margin: 0; font-size: 0.82rem; color: #94a3b8; line-height: 1.4;">
               A tua aplicação atualiza-se de forma autónoma através do Service Worker, preservando os teus desenhos e definições locais.
@@ -1093,8 +1093,18 @@
         <div class="update-changelog-list">
           <div class="changelog-item">
             <div class="changelog-header">
-              <span class="changelog-ver">v0.10.8</span>
+              <span class="changelog-ver">v0.10.9</span>
               <span class="changelog-tag" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">Atual</span>
+            </div>
+            <div class="changelog-title">🎨 Pré-visualização Gráfica Realista de Desbaste e Chanfro</div>
+            <div class="changelog-body">
+              O desbaste (pocket) preenche visualmente o interior a verde translúcido para mostrar a remoção de material da cavidade; o chanfro apresenta a largura real de bisel em mm e a sua projeção exterior ou interior com realce violeta; atualização em tempo real ao alterar parâmetros.
+            </div>
+          </div>
+
+          <div class="changelog-item">
+            <div class="changelog-header">
+              <span class="changelog-ver">v0.10.8</span>
             </div>
             <div class="changelog-title">📑 Múltiplas Operações no Mesmo Vetor (Duplicar Ctrl+D)</div>
             <div class="changelog-body">
@@ -1177,7 +1187,7 @@
     </div>
   </div>
 
-  <script type="module" src="./src/app.js?v=0.10.8"></script>
+  <script type="module" src="./src/app.js?v=0.10.9"></script>
 </body>
 
 </html>

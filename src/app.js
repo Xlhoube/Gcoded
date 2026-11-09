@@ -2168,11 +2168,13 @@ function setupEventListeners() {
     if (el) {
       el.addEventListener('input', () => {
         updateChamferPreview();
+        updateChamferVisuals();
         clearVisualToolpaths();
         saveAppState();
       });
       el.addEventListener('change', () => {
         updateChamferPreview();
+        updateChamferVisuals();
         clearVisualToolpaths();
         saveAppState();
       });
@@ -2826,6 +2828,9 @@ function restoreCanvasFromSnapshot(jsonStr) {
           targetFindTolerance: 8,
           strokeUniform: true
         });
+        if (obj.camStrategy) {
+          applyStrategyToObject(obj, obj.camStrategy);
+        }
         canvas.add(obj);
       });
 
@@ -6285,6 +6290,9 @@ async function loadAppState() {
             obj.perPixelTargetFind = true;
             obj.targetFindTolerance = 8;
             obj.strokeUniform = true;
+            if (obj.camStrategy) {
+              applyStrategyToObject(obj, obj.camStrategy);
+            }
           });
           canvas.requestRenderAll();
           res();
@@ -6402,19 +6410,141 @@ function getStrategyLabel(val) {
 }
 
 /**
- * Aplica uma estratégia CAM e a respetiva cor ao objeto
+ * Aplica uma estratégia CAM e a respetiva representação visual ao objeto:
+ * - Pocket (Desbaste): interior preenchido com verde esmeralda translúcido
+ * - Chanfro: linha violeta com bisel visual proporcional à largura e lado (exterior/interior)
+ * - Outside (Exterior): contorno azul ciano com halo exterior e fundo transparente
+ * - Inside (Interior): linha pontilhada âmbar com leve sombreamento
+ * - On: linha magenta contínua fina
  */
 function applyStrategyToObject(obj, strategyVal) {
   if (!obj || obj.isOriginMarker || obj.isVisualPath) return;
   obj.camStrategy = strategyVal;
-  const colors = {
-    outside: '#38bdf8',  // Azul Ciano - Perfil Exterior
-    inside: '#f59e0b',   // Âmbar - Perfil Interior
-    pocket: '#10b981',   // Verde Esmeralda - Desbaste de Caixa / Pocket
-    chamfer: '#a855f7',  // Roxo / Violeta - Chanfro nas Arestas
-    on: '#ec4899'        // Rosa - Sobre a Linha
-  };
-  obj.set({ stroke: colors[strategyVal] || '#38bdf8' });
+
+  const wMm = inputChamferWidth ? (parseFloat(inputChamferWidth.value) || 1.0) : 1.0;
+  const chamferSide = paramChamferSide ? paramChamferSide.value : 'outside';
+
+  switch (strategyVal) {
+    case 'pocket':
+      // Desbaste Interior: interior visivelmente preenchido para indicar remoção de material
+      obj.set({
+        stroke: '#10b981',
+        strokeWidth: 2,
+        strokeDashArray: null,
+        fill: 'rgba(16, 185, 129, 0.28)',
+        shadow: new fabric.Shadow({
+          color: 'rgba(16, 185, 129, 0.45)',
+          blur: 5,
+          offsetX: 0,
+          offsetY: 0
+        })
+      });
+      break;
+
+    case 'chamfer': {
+      // Chanfro nas Arestas: visualização em roxo/violeta com bisel exterior ou interior
+      const chamferPx = Math.max(3, Math.min(14, wMm * ESCALA_MM_PX));
+      if (chamferSide === 'outside') {
+        // Chanfro pelo lado exterior da linha
+        obj.set({
+          stroke: '#a855f7',
+          strokeWidth: 2.5,
+          strokeDashArray: [6, 3],
+          fill: 'transparent',
+          shadow: new fabric.Shadow({
+            color: 'rgba(168, 85, 247, 0.85)',
+            blur: Math.max(5, chamferPx * 1.5),
+            offsetX: 0,
+            offsetY: 0
+          })
+        });
+      } else if (chamferSide === 'inside') {
+        // Chanfro pelo lado interior da linha
+        obj.set({
+          stroke: '#c084fc',
+          strokeWidth: 2.5,
+          strokeDashArray: [4, 4],
+          fill: 'rgba(168, 85, 247, 0.22)',
+          shadow: new fabric.Shadow({
+            color: 'rgba(168, 85, 247, 0.4)',
+            blur: 3,
+            offsetX: 0,
+            offsetY: 0
+          })
+        });
+      } else {
+        // Chanfro sobre a linha
+        obj.set({
+          stroke: '#a855f7',
+          strokeWidth: chamferPx,
+          strokeDashArray: null,
+          fill: 'transparent',
+          shadow: null
+        });
+      }
+      break;
+    }
+
+    case 'outside':
+      // Perfil Exterior: fundo transparente, linha sólida azul ciano com halo suave
+      obj.set({
+        stroke: '#38bdf8',
+        strokeWidth: 2,
+        strokeDashArray: null,
+        fill: 'transparent',
+        shadow: new fabric.Shadow({
+          color: 'rgba(56, 189, 248, 0.35)',
+          blur: 4,
+          offsetX: 0,
+          offsetY: 0
+        })
+      });
+      break;
+
+    case 'inside':
+      // Perfil Interior: traço pontilhado âmbar, leve preenchimento de cavidade/furo
+      obj.set({
+        stroke: '#f59e0b',
+        strokeWidth: 2,
+        strokeDashArray: [8, 4],
+        fill: 'rgba(245, 158, 11, 0.10)',
+        shadow: null
+      });
+      break;
+
+    case 'on':
+      // Sobre a linha: linha contínua rosa/magenta fina sem preenchimento
+      obj.set({
+        stroke: '#ec4899',
+        strokeWidth: 1.5,
+        strokeDashArray: null,
+        fill: 'transparent',
+        shadow: null
+      });
+      break;
+
+    default:
+      obj.set({
+        stroke: '#38bdf8',
+        strokeWidth: 2,
+        strokeDashArray: null,
+        fill: 'transparent',
+        shadow: null
+      });
+      break;
+  }
+}
+
+/**
+ * Atualiza em tempo real o estilo dos contornos com chanfro quando os parâmetros mudam
+ */
+function updateChamferVisuals() {
+  if (typeof canvas === 'undefined' || !canvas) return;
+  const chamferObjs = canvas.getObjects().filter(o => !o.isOriginMarker && !o.isVisualPath && o.camStrategy === 'chamfer');
+  chamferObjs.forEach(obj => {
+    applyStrategyToObject(obj, 'chamfer');
+  });
+  canvas.requestRenderAll();
 }
 
 /**
@@ -6678,10 +6808,7 @@ function duplicateSelectedObject(targetObj) {
           layerName: child.layerName ? `${child.layerName} (${getStrategyLabel(nextStrat)})` : `Contorno (${getStrategyLabel(nextStrat)})`,
           camStrategy: nextStrat
         });
-        if (nextStrat === 'pocket') cloned.set('stroke', '#10b981');
-        else if (nextStrat === 'chamfer') cloned.set('stroke', '#a855f7');
-        else if (nextStrat === 'inside') cloned.set('stroke', '#f59e0b');
-        else cloned.set('stroke', '#38bdf8');
+        applyStrategyToObject(cloned, nextStrat);
 
         cloned.setCoords();
         canvas.add(cloned);
@@ -6710,10 +6837,7 @@ function duplicateSelectedObject(targetObj) {
       layerName: obj.layerName ? `${obj.layerName} (${getStrategyLabel(nextStrat)})` : `Contorno (${getStrategyLabel(nextStrat)})`,
       camStrategy: nextStrat
     });
-    if (nextStrat === 'pocket') cloned.set('stroke', '#10b981');
-    else if (nextStrat === 'chamfer') cloned.set('stroke', '#a855f7');
-    else if (nextStrat === 'inside') cloned.set('stroke', '#f59e0b');
-    else cloned.set('stroke', '#38bdf8');
+    applyStrategyToObject(cloned, nextStrat);
 
     cloned.setCoords();
     canvas.add(cloned);
