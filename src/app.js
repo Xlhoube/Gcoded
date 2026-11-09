@@ -4884,6 +4884,9 @@ function generateGCode() {
           });
         }
 
+        const offX = (obj.type === 'path' && obj.pathOffset) ? obj.pathOffset.x : 0;
+        const offY = (obj.type === 'path' && obj.pathOffset) ? obj.pathOffset.y : 0;
+
         dStrings.forEach(dStr => {
           if (!dStr.trim()) return;
           const tempPath = document.createElementNS(svgNS, "path");
@@ -4898,7 +4901,7 @@ function generateGCode() {
               for (let i = 0; i <= numPoints; i++) {
                 const dist = (i / numPoints) * totalLength;
                 const pt = tempPath.getPointAtLength(dist);
-                const transformedPt = fabric.util.transformPoint({ x: pt.x, y: pt.y }, matrix);
+                const transformedPt = fabric.util.transformPoint(new fabric.Point(pt.x - offX, pt.y - offY), matrix);
                 pts.push(transformedPt);
               }
               if (pts.length > 0) {
@@ -6795,8 +6798,10 @@ function duplicateSelectedObject(targetObj) {
 
   // Se for uma seleção múltipla
   if (obj.type === 'activeSelection') {
+    const items = obj.getObjects().slice();
+    canvas.discardActiveObject(); // Restaura coordenadas mundiais absolutas nos objetos antes de clonar
     const clones = [];
-    obj.forEachObject(child => {
+    items.forEach(child => {
       child.clone(cloned => {
         const nextStrat = (child.camStrategy === 'pocket' || child.camStrategy === 'outside') ? 'chamfer' : (child.camStrategy === 'chamfer' ? 'pocket' : 'chamfer');
         cloned.set({
@@ -6821,7 +6826,7 @@ function duplicateSelectedObject(targetObj) {
     saveAppState();
     recordHistoryState();
     renderLayersAndVectorsList();
-    showCamToast(`📑 ${clones.length} contornos duplicados! Podes atribuir uma segunda função (ex: Chanfro ou Desbaste).`);
+    showCamToast(`📑 ${clones.length} contornos duplicados na mesma posição! Podes atribuir uma segunda função (ex: Chanfro ou Desbaste).`);
     return;
   }
 

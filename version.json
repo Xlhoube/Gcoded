@@ -1,12 +1,11 @@
 {
-  "version": "0.10.9",
+  "version": "0.10.10",
   "name": "Gcoded CAM",
-  "build": "20261109-09",
-  "updatedAt": "2026-11-09T08:30:00Z",
+  "build": "20261109-10",
+  "updatedAt": "2026-11-09T08:35:00Z",
   "highlights": [
-    "🎨 Preenchimento Visual de Desbaste (Pocket): O interior da geometria fica preenchido a verde translúcido indicando a remoção de material da cavidade",
-    "📐 Visualização de Bisel para Chanfro: O contorno reflete a largura real do chanfro em mm e a sua projeção exterior ou interior com realce violeta",
-    "⚡ Atualização Dinâmica na Mesa: Alterar a largura do chanfro ou trocar de estratégia atualiza instantaneamente o aspeto do desenho no canvas",
-    "👀 Visualização Simultânea de Operações Combinadas: Permite ver perfeitamente o desbaste verde no interior e o chanfro violeta na aresta sobreposta"
+    "🎯 Alinhamento Perfeito de Trajetórias (Zero Offset): Corrigida a transformação de coordenadas em geometrias SVG/DXF, garantindo que o desbaste e o chanfro coincidem 100% com o desenho original",
+    "📍 Duplicação Exata na Mesma Posição: Correção de coordenadas globais ao duplicar seleções múltiplas (evita deslocamento para o canto inferior direito)",
+    "⚙️ Sincronização Absoluta Canvas / G-code / Simulador 3D: Trajetórias 2D e código de máquina gerados exatamente onde o vetor se encontra na mesa"
   ]
 }
