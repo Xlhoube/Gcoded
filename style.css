@@ -1516,3 +1516,247 @@ select:focus {
 .tip-card-text strong {
   color: #f8fafc;
 }
+
+/* ============================================================
+   BOTÃO DE INSTALAR (PWA) & MODAL DE INSTALAÇÃO
+   ============================================================ */
+.install-group {
+  display: flex;
+  align-items: center;
+}
+
+.install-btn {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.18), rgba(234, 88, 12, 0.32));
+  border: 1px solid rgba(249, 115, 22, 0.5);
+  color: #ffedd5;
+  font-weight: 600;
+  box-shadow: 0 0 12px rgba(249, 115, 22, 0.18);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.install-btn:hover {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.35), rgba(234, 88, 12, 0.5));
+  border-color: #f97316;
+  color: #ffffff;
+  box-shadow: 0 0 18px rgba(249, 115, 22, 0.4);
+  transform: translateY(-1px);
+}
+
+.install-btn.installed {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #6ee7b7;
+  box-shadow: none;
+}
+
+.install-btn.installed:hover {
+  background: rgba(16, 185, 129, 0.25);
+  border-color: #10b981;
+  color: #ffffff;
+}
+
+.install-btn.pulse {
+  animation: installPulseAnim 2.2s infinite;
+}
+
+@keyframes installPulseAnim {
+  0% {
+    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(249, 115, 22, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0);
+  }
+}
+
+.install-modal-content {
+  max-width: 650px;
+  width: 92%;
+}
+
+.install-hero-card {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.1) 0%, rgba(15, 23, 42, 0.75) 100%);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  border-radius: 14px;
+  padding: 1.2rem 1.4rem;
+  margin-bottom: 1.2rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.install-hero-info {
+  flex: 1;
+}
+
+.install-hero-info h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 0.25rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.install-hero-info p {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  margin: 0 0 0.6rem 0;
+  line-height: 1.35;
+}
+
+.install-badges {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.install-tag {
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  color: #cbd5e1;
+}
+
+.install-cta-btn {
+  background: linear-gradient(135deg, #f97316, #ea580c);
+  border: 1px solid #fb923c;
+  color: #ffffff;
+  font-weight: 600;
+  padding: 0.65rem 1.15rem;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(249, 115, 22, 0.35);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.install-cta-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(249, 115, 22, 0.5);
+  background: linear-gradient(135deg, #fb923c, #ea580c);
+}
+
+.install-features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.8rem;
+  margin-bottom: 1.2rem;
+}
+
+.install-feature-item {
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  padding: 0.9rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.install-feature-item:hover {
+  transform: translateY(-2px);
+  border-color: rgba(249, 115, 22, 0.25);
+  background: rgba(15, 23, 42, 0.75);
+}
+
+.install-feature-item .feature-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.install-feature-item .feature-text strong {
+  display: block;
+  font-size: 0.85rem;
+  color: #f1f5f9;
+  margin-bottom: 0.25rem;
+  font-weight: 600;
+}
+
+.install-feature-item .feature-text span {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  line-height: 1.4;
+  display: block;
+}
+
+.install-guide-section {
+  background: rgba(10, 14, 23, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+}
+
+.install-guide-section h4 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin: 0 0 0.8rem 0;
+}
+
+.install-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.step-card {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  padding: 0.6rem 0.85rem;
+  border-left: 3px solid #38bdf8;
+  transition: background 0.2s ease;
+}
+
+.step-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.step-platform {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #38bdf8;
+  margin-bottom: 0.25rem;
+}
+
+.step-desc {
+  font-size: 0.78rem;
+  color: #cbd5e1;
+  line-height: 1.45;
+}
+
+.step-desc strong {
+  color: #ffffff;
+}
+
+@media (max-width: 640px) {
+  .install-hero-card {
+    flex-direction: column;
+    text-align: center;
+  }
+  .install-hero-action {
+    width: 100%;
+  }
+  .install-cta-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .install-features-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

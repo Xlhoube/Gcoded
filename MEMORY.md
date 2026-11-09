@@ -122,6 +122,20 @@
     1. Configurado o remote origin para `https://github.com/Xlhoube/Gcoded.git`.
     2. Alinhado o ramo principal para `main` com tracking upstream (`git push -u origin main`).
     3. Todos os 25 commits atómicos (desde o protótipo inicial até v0.8.1 com DXF, Holding Tabs, Offsets de Fresagem e Dica de Engenharia) foram enviados e sincronizados com sucesso no GitHub.
+- **[2026-11-09] | DECISÃO-023 | Suporte de Instalação PWA (Progressive Web App) e Funcionamento 100% Offline**
+  - **Contexto:** Necessidade de permitir a instalação do Gcoded como aplicação nativa dedicada em desktop (Windows, macOS, Linux) e mobile (Android, iOS), operando sem barra de endereços e 100% offline em computadores dedicados de oficina CNC.
+  - **Decisão:**
+    1. Criado `manifest.webmanifest` e conjunto de ícones com branding CNC (SVG vetorial, PNG 192x192, 512x512 e maskable).
+    2. Implementado Service Worker (`sw.js`) para pré-carregamento e cache offline-first de todos os recursos essenciais e bibliotecas CDNs.
+    3. Adicionado botão dinâmico "📲 Instalar App" no cabeçalho superior (`#top-bar`) com captura de `beforeinstallprompt` e deteção de modo `standalone`.
+    4. Criada caixa modal dedicada de instalação (`#install-modal`) com guias passo a passo para Chrome/Edge/Brave, Safari (iOS / macOS) e Android.
+    5. Incremento de versão para `v0.9.0` com cache-busting atualizado.
+- **[2026-11-09] | DECISÃO-024 | Integração do REA (Reverse Engineer Anything - morluto/rea) como Skill Oficial e MCP Server**
+  - **Contexto:** O utilizador solicitou a adição do REA (`https://github.com/morluto/rea`) ao ambiente do agente.
+  - **Decisão:**
+    1. Instalada e registada a skill oficial `reverse-engineer-anything` (v49 compatível com `rea-agents@6.8.0`, com todas as referências de engenharia reversa).
+    2. Configurado o servidor MCP para Antigravity em `~/.gemini/config/mcp_config.json` apontando para o runtime direto do Node.js, validado com estado `aligned` no `rea doctor`.
+    3. Disponibilizado o pacote `rea-agents` e a CLI `rea` com 175 comandos e 229 ferramentas de análise reversa.
 
 ---
 
@@ -151,4 +165,6 @@
 - [x] Desenvolver estratégia de corte "Interior (Pocket)" para preenchimento de caixas (Passo 3/3)
 - [x] Caixa de Importação de Ficheiros com Dropzone e Dica de Engenharia para Vetores Puros (π, SVG e DXF)
 - [x] Repositório GitHub remoto configurado e sincronizado com tracking upstream (main)
+- [x] Opção de Instalar Aplicação (PWA com Manifest, Service Worker, Ícones e Modal de Instalação)
+- [x] Integração de REA (Reverse Engineer Anything - morluto/rea) via Skill e Servidor MCP Alinhado
 

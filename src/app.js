@@ -27,6 +27,8 @@ let btnDelete, btnClear, btnCopy;
 let canvasCoordsSpan, gcodeOutputText;
 let btnGenerate, btnDownload;
 let btnZoomIn, btnZoomOut, btnResetView;
+let deferredInstallPrompt = null;
+let btnInstallApp, btnModalInstallAction, installModal, btnCloseInstall, btnCloseInstallFooter;
 
 // Inputs de Parâmetros
 let inputToolDia, inputSafeZ, inputFeedXY, inputFeedZ, inputDepthTotal, inputDepthPass, selectStrategy;
@@ -109,6 +111,7 @@ function init() {
   updateTableSize();
   initToolLibrary(); // Inicializar biblioteca de ferramentas
   setupEventListeners();
+  setupPWAInstall(); // Configurar suporte de instalação PWA e offline
   loadAppState();
 }
 
@@ -129,6 +132,12 @@ function cacheUIElements() {
   btnCloseImportFooter = document.getElementById('btn-close-import-footer');
   importDropzone = document.getElementById('import-dropzone');
   btnBrowseFile = document.getElementById('btn-browse-file');
+
+  btnInstallApp = document.getElementById('btn-install-app');
+  btnModalInstallAction = document.getElementById('btn-modal-install-action');
+  installModal = document.getElementById('install-modal');
+  btnCloseInstall = document.getElementById('btn-close-install');
+  btnCloseInstallFooter = document.getElementById('btn-close-install-footer');
   
   btnDelete = document.getElementById('btn-delete');
   btnClear = document.getElementById('btn-clear');
@@ -4969,6 +4978,144 @@ function ungroupSelectedObject() {
 
   clearVisualToolpaths();
   saveAppState();
+}
+
+/**
+ * Configura suporte PWA (Progressive Web App), instalação nativa e Service Worker offline
+ */
+function setupPWAInstall() {
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+  if (isStandalone) {
+    if (btnInstallApp) {
+      btnInstallApp.classList.add('installed');
+      btnInstallApp.innerHTML = '<span class="icon">✅</span> <span class="install-text">Instalado</span>';
+      btnInstallApp.title = 'O Gcoded já está a ser executado como aplicação instalada (100% offline)';
+    }
+    if (btnModalInstallAction) {
+      btnModalInstallAction.innerHTML = '✅ Aplicação Já Instalada';
+      btnModalInstallAction.disabled = true;
+      btnModalInstallAction.style.opacity = '0.75';
+    }
+  }
+
+  // Capturar evento de instalação nativa do browser (Chrome, Edge, Samsung, etc.)
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+
+    if (btnInstallApp && !isStandalone) {
+      btnInstallApp.classList.add('pulse');
+      btnInstallApp.innerHTML = '<span class="icon">📲</span> <span class="install-text">Instalar App</span>';
+      btnInstallApp.title = 'Instalar o Gcoded no teu computador ou telemóvel';
+    }
+  });
+
+  // Notificação após a instalação bem-sucedida
+  window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+    if (btnInstallApp) {
+      btnInstallApp.classList.remove('pulse');
+      btnInstallApp.classList.add('installed');
+      btnInstallApp.innerHTML = '<span class="icon">✅</span> <span class="install-text">Instalado</span>';
+      btnInstallApp.title = 'Gcoded instalado com sucesso!';
+    }
+    showCamToast('🎉 Gcoded instalado com sucesso no teu dispositivo!');
+    if (installModal) installModal.style.display = 'none';
+  });
+
+  const openInstallModal = () => {
+    if (installModal) installModal.style.display = 'flex';
+  };
+
+  const closeInstallModal = () => {
+    if (installModal) installModal.style.display = 'none';
+  };
+
+  // Botão de Instalar na Barra Superior
+  if (btnInstallApp) {
+    btnInstallApp.addEventListener('click', async () => {
+      if (deferredInstallPrompt) {
+        try {
+          deferredInstallPrompt.prompt();
+          const { outcome } = await deferredInstallPrompt.userChoice;
+          if (outcome === 'accepted') {
+            console.log('[Gcoded PWA] Instalação aceite pelo utilizador.');
+            deferredInstallPrompt = null;
+            closeInstallModal();
+          } else {
+            console.log('[Gcoded PWA] Instalação cancelada pelo utilizador.');
+          }
+        } catch (err) {
+          console.warn('[Gcoded PWA] Erro ao disparar prompt:', err);
+          openInstallModal();
+        }
+      } else {
+        openInstallModal();
+      }
+    });
+  }
+
+  // Ação CTA dentro do Modal
+  if (btnModalInstallAction) {
+    btnModalInstallAction.addEventListener('click', async () => {
+      if (deferredInstallPrompt) {
+        try {
+          deferredInstallPrompt.prompt();
+          const { outcome } = await deferredInstallPrompt.userChoice;
+          if (outcome === 'accepted') {
+            deferredInstallPrompt = null;
+            closeInstallModal();
+          }
+        } catch (err) {
+          console.warn('[Gcoded PWA] Erro ao disparar prompt modal:', err);
+        }
+      } else {
+        const standaloneNow = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+        if (standaloneNow) {
+          showCamToast('✅ O Gcoded já se encontra instalado no teu sistema!');
+        } else {
+          showCamToast('💡 Segue as instruções abaixo para o teu navegador/sistema');
+        }
+      }
+    });
+  }
+
+  // Controlos de fecho do Modal de Instalação
+  if (btnCloseInstall) btnCloseInstall.addEventListener('click', closeInstallModal);
+  if (btnCloseInstallFooter) btnCloseInstallFooter.addEventListener('click', closeInstallModal);
+  if (installModal) {
+    installModal.addEventListener('click', (e) => {
+      if (e.target === installModal) closeInstallModal();
+    });
+  }
+
+  // Fechar com tecla Escape
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && installModal && installModal.style.display === 'flex') {
+      closeInstallModal();
+    }
+  });
+
+  // Registar o Service Worker para cache 100% offline
+  registerServiceWorker();
+}
+
+/**
+ * Regista o Service Worker para persistência de ficheiros e funcionamento offline
+ */
+function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then((reg) => {
+          console.log('[Gcoded SW] Service Worker registado com âmbito:', reg.scope);
+        })
+        .catch((err) => {
+          console.warn('[Gcoded SW] Registo de Service Worker falhou:', err);
+        });
+    });
+  }
 }
 
 // Iniciar imediatamente se o DOM já estiver pronto, ou aguardar DOMContentLoaded

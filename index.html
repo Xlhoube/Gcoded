@@ -6,6 +6,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gcoded - Gerador CAM/CNC Offline-First</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="theme-color" content="#f97316">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Gcoded">
   <!-- CDNs das Bibliotecas Gráficas, Tracing e 3D WebGL -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/imagetracerjs@1.2.6/imagetracer_v1.2.6.js"></script>
@@ -59,6 +66,13 @@
       </div>
 
       <div class="spacer"></div>
+
+      <div class="install-group">
+        <button id="btn-install-app" class="action-btn install-btn"
+          title="Instalar Gcoded no computador ou telemóvel para acesso rápido e 100% offline">
+          <span class="icon">📲</span> <span class="install-text">Instalar App</span>
+        </button>
+      </div>
 
       <div class="danger-group">
         <button id="btn-delete" class="danger-btn disabled" title="Eliminar objecto selecionado" disabled>
@@ -508,6 +522,98 @@
     </div>
   </div>
 
+  <!-- Modal de Instalação da Aplicação (PWA Offline-First) -->
+  <div id="install-modal" class="modal" style="display: none;">
+    <div class="modal-content install-modal-content">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 0.6rem;">
+          <span style="font-size: 1.6rem; line-height: 1;">📲</span>
+          <div>
+            <h2>Instalar Gcoded CAM</h2>
+            <p style="margin: 0.2rem 0 0; font-size: 0.8rem; color: #94a3b8;">Executa o Gcoded como aplicação nativa dedicada, rápida e 100% offline.</p>
+          </div>
+        </div>
+        <button id="btn-close-install" class="close-btn">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Hero Card com Ação Rápida de Instalação -->
+        <div class="install-hero-card">
+          <div class="install-hero-icon">
+            <img src="icons/icon-192.png" alt="Gcoded Logo" style="width: 58px; height: 58px; border-radius: 14px; box-shadow: 0 4px 14px rgba(249,115,22,0.35);">
+          </div>
+          <div class="install-hero-info">
+            <h3>Gcoded CAM &bull; CNC Router</h3>
+            <p>Gerador CAM de Percursos e Simulador 3D para Máquinas CNC</p>
+            <div class="install-badges">
+              <span class="install-tag">⚡ 100% Offline</span>
+              <span class="install-tag">🖥️ Janela Dedicada</span>
+              <span class="install-tag">🔒 Totalmente Local</span>
+            </div>
+          </div>
+          <div class="install-hero-action">
+            <button id="btn-modal-install-action" class="install-cta-btn">
+              ⬇️ Instalar Agora
+            </button>
+          </div>
+        </div>
+
+        <!-- 3 Vantagens Principais -->
+        <div class="install-features-grid">
+          <div class="install-feature-item">
+            <div class="feature-icon">🚀</div>
+            <div class="feature-text">
+              <strong>Acesso Imediato</strong>
+              <span>Abre num clique a partir do Ambiente de Trabalho ou Barra de Tarefas, sem abrir o browser.</span>
+            </div>
+          </div>
+          <div class="install-feature-item">
+            <div class="feature-icon">🔌</div>
+            <div class="feature-text">
+              <strong>Oficina 100% Offline</strong>
+              <span>Gera G-code e simula em 3D diretamente no computador da máquina CNC, mesmo sem Wi-Fi.</span>
+            </div>
+          </div>
+          <div class="install-feature-item">
+            <div class="feature-icon">🪟</div>
+            <div class="feature-text">
+              <strong>Espaço Imersivo</strong>
+              <span>Elimina abas e barras de URL, maximizando o espaço útil para o Canvas 2D e o Simulador 3D.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Guia por Plataforma / Navegador -->
+        <div class="install-guide-section">
+          <h4>📋 Guia de Instalação Rápida por Sistema / Navegador:</h4>
+          <div class="install-steps-list">
+            <div class="step-card">
+              <div class="step-platform">🖥️ Google Chrome / Microsoft Edge / Brave (Windows, Mac, Linux)</div>
+              <div class="step-desc">Clica no botão <strong>"Instalar Agora"</strong> acima, ou clica no ícone <strong>Instalar</strong> (⊕ ou 💻) à direita na barra de endereços do browser, ou vai ao Menu <strong>(⋮) &gt; "Instalar Gcoded..."</strong>.</div>
+            </div>
+            <div class="step-card">
+              <div class="step-platform">🍏 Safari no iPhone ou iPad (iOS)</div>
+              <div class="step-desc">Toca no botão de <strong>Partilhar</strong> (ícone <span style="font-size:1.05em;">⎋</span> com quadrado e seta para cima) na barra inferior do Safari e escolhe <strong>"Adicionar ao Ecrã Principal" (➕)</strong>.</div>
+            </div>
+            <div class="step-card">
+              <div class="step-platform">🍎 Safari no Mac (macOS Sonoma ou superior)</div>
+              <div class="step-desc">No menu superior do macOS, clica em <strong>Ficheiro &gt; "Adicionar à Dock..."</strong>.</div>
+            </div>
+            <div class="step-card">
+              <div class="step-platform">🤖 Dispositivos Android (Chrome, Edge ou Samsung)</div>
+              <div class="step-desc">Toca no botão <strong>"Instalar Agora"</strong> ou no menu <strong>(⋮) &gt; "Instalar aplicação"</strong> ou <strong>"Adicionar ao ecrã principal"</strong>.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer"
+        style="display: flex; justify-content: flex-end; align-items: center; margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid rgba(255,255,255,0.08);">
+        <button id="btn-close-install-footer" class="secondary-btn" style="font-size: 0.82rem;">Fechar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal de Corte 3D por Imagem (AI Deep Map & Relief Carving) -->
   <div id="relief-modal" class="modal" style="display: none;">
     <div class="modal-content relief-modal-content">
@@ -694,7 +800,7 @@
     <button id="cam-toast-action" class="cam-toast-btn">👁️ Abrir Simulador 3D</button>
   </div>
 
-  <script type="module" src="./src/app.js?v=0.8.1"></script>
+  <script type="module" src="./src/app.js?v=0.9.0"></script>
 </body>
 
 </html>
