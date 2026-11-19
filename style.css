@@ -2819,3 +2819,54 @@ select:focus {
   line-height: 1.45;
 }
 
+
+/* ==========================================================================
+   PREFLIGHT SAFETY PANEL (INSPIRADO NO CUT-CRAFT)
+   ========================================================================== */
+.preflight-panel {
+  margin-top: 0.6rem;
+  border-radius: 7px;
+  padding: 0.55rem 0.65rem;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  gap: 0.32rem;
+}
+
+.preflight-panel.preflight-ok {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #6ee7b7;
+}
+
+.preflight-panel.preflight-warn {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fcd34d;
+}
+
+.preflight-panel.preflight-err {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #fca5a5;
+}
+
+.preflight-header {
+  font-weight: 700;
+  font-size: 0.76rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.preflight-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  padding-left: 0.15rem;
+}
+
+.preflight-item.is-err { color: #fca5a5; }
+.preflight-item.is-warn { color: #fde68a; }
+.preflight-item.is-info { color: #93c5fd; }

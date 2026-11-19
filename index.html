@@ -248,16 +248,21 @@
             <div id="operations-list" class="operations-list-container">
               <!-- Renderizado dinamicamente via JavaScript -->
             </div>
+
+            <!-- Verificações Pré-Voo (Cut-Craft Preflight Safety Checks) -->
+            <div id="preflight-panel" class="preflight-panel" style="display: none;">
+              <!-- Renderizado dinamicamente via JavaScript -->
+            </div>
           </div>
 
-          <!-- Cartão de Estratégias Vectric -->
+          <!-- Cartão de Estratégias Vectric / Cut-Craft -->
           <div class="panel-section">
             <div class="section-title-row">
               <h2>Estratégia de Fresagem</h2>
               <span id="active-strat-indicator" class="active-strat-badge">Perfil Exterior</span>
             </div>
 
-            <!-- Grelha de botões visuais Vectric -->
+            <!-- Grelha de 6 botões visuais Vectric / Cut-Craft -->
             <div class="strategy-grid">
               <button type="button" class="strat-btn active" data-strategy="outside" title="Perfil Exterior (+R): fresa corta por fora do contorno">
                 <span class="strat-icon">🟦</span>
@@ -269,15 +274,20 @@
                 <span class="strat-name">Interior</span>
                 <span class="strat-badge">-Raio</span>
               </button>
-              <button type="button" class="strat-btn" data-strategy="pocket" title="Desbaste / Pocket: esvazia o interior do contorno com passagens concêntricas">
+              <button type="button" class="strat-btn" data-strategy="pocket" title="Desbaste / Pocket: esvazia o interior (Concêntrico ou Raster)">
                 <span class="strat-icon">🟩</span>
                 <span class="strat-name">Pocket</span>
                 <span class="strat-badge">Desbaste</span>
               </button>
-              <button type="button" class="strat-btn" data-strategy="chamfer" title="Chanfro nas Arestas: quebra de canto a 45° ou 60° com fresa cónica">
+              <button type="button" class="strat-btn" data-strategy="chamfer" title="Chanfro nas Arestas: bisel exato com fresa V-Bit">
                 <span class="strat-icon">🟪</span>
                 <span class="strat-name">Chanfro</span>
                 <span class="strat-badge">Bisel</span>
+              </button>
+              <button type="button" class="strat-btn" data-strategy="drill" title="Furação (Peck Drilling): fura no centro dos círculos/contornos">
+                <span class="strat-icon">🎯</span>
+                <span class="strat-name">Furação</span>
+                <span class="strat-badge">Peck Z</span>
               </button>
               <button type="button" class="strat-btn" data-strategy="on" title="Sobre a Linha: centro da fresa segue o vetor para gravação">
                 <span class="strat-icon">🌸</span>
@@ -291,13 +301,49 @@
               <select id="param-strategy">
                 <option value="outside" selected>Exterior (Perfil / Profile) - Compensação +R</option>
                 <option value="inside">Interior (Perfil / Furo) - Compensação -R</option>
-                <option value="pocket">Caixa / Pocket (Desbaste Concêntrico)</option>
+                <option value="pocket">Caixa / Pocket (Desbaste)</option>
                 <option value="chamfer">📐 Chanfro nas Arestas (Chamfer / Bisel)</option>
+                <option value="drill">🎯 Furação (Peck Drilling)</option>
                 <option value="on">Sobre a Linha (Gravação / Engrave)</option>
               </select>
             </div>
 
-            <!-- Parâmetros de Chanfro nas Arestas (Chamfer) -->
+            <!-- Controlos Contextuais de Perfil & Direção (Cut-Craft) -->
+            <div id="profile-settings-grid" style="margin-top: 0.55rem; padding: 0.5rem 0.6rem; background: rgba(56, 189, 248, 0.06); border: 1px solid rgba(56, 189, 248, 0.22); border-radius: 6px;">
+              <div class="input-grid">
+                <div class="input-field">
+                  <label for="param-cut-direction">Sentido de Corte</label>
+                  <select id="param-cut-direction" title="Concordante (Climb) dá melhor acabamento em madeira/alumínio; Discordante (Conventional) evita puxar em máquinas menos rígidas">
+                    <option value="climb" selected>🔄 Concordante (Climb)</option>
+                    <option value="conventional">↩️ Discordante (Conv.)</option>
+                  </select>
+                </div>
+                <div class="input-field">
+                  <label for="param-allowance">Sobreespessura (mm)</label>
+                  <input type="number" id="param-allowance" value="0.0" min="-2.0" max="5.0" step="0.05" title="Folga deixada na parede (+ deixa material, - alarga o corte)">
+                </div>
+              </div>
+            </div>
+
+            <!-- Controlos Contextuais de Desbaste / Pocket (Cut-Craft) -->
+            <div id="pocket-settings-grid" style="display: none; margin-top: 0.55rem; padding: 0.5rem 0.6rem; background: rgba(16, 185, 129, 0.07); border: 1px solid rgba(16, 185, 129, 0.28); border-radius: 6px;">
+              <div class="input-grid">
+                <div class="input-field">
+                  <label for="param-pocket-pattern">Padrão de Desbaste</label>
+                  <select id="param-pocket-pattern">
+                    <option value="offset-middle-out" selected>🌀 Concêntrico (Centro → Fora)</option>
+                    <option value="offset-outline-in">🎯 Concêntrico (Fora → Centro)</option>
+                    <option value="raster">🦓 Raster Zig-Zag + Acab.</option>
+                  </select>
+                </div>
+                <div class="input-field" id="raster-angle-container" style="display: none;">
+                  <label for="param-raster-angle">Ângulo Raster (°)</label>
+                  <input type="number" id="param-raster-angle" value="0" min="0" max="90" step="15">
+                </div>
+              </div>
+            </div>
+
+            <!-- Parâmetros de Chanfro nas Arestas (Chamfer V-Bit exato) -->
             <div id="chamfer-settings-grid" style="display: none; margin-top: 0.6rem; padding: 0.6rem; background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 6px;">
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem;">
                 <span style="font-size: 0.82rem; font-weight: 600; color: #c084fc;">📐 Configuração do Chanfro</span>
@@ -306,10 +352,10 @@
               <div class="input-grid">
                 <div class="input-field">
                   <label for="param-chamfer-width">Largura Chanfro (mm)</label>
-                  <input type="number" id="param-chamfer-width" value="1.0" min="0.1" max="10.0" step="0.1">
+                  <input type="number" id="param-chamfer-width" value="1.0" min="0.1" max="15.0" step="0.1">
                 </div>
                 <div class="input-field">
-                  <label for="param-chamfer-angle">Ângulo Fresa (°)</label>
+                  <label for="param-chamfer-angle">Ângulo V-Bit (°)</label>
                   <select id="param-chamfer-angle">
                     <option value="90" selected>90° (Bisel 45°)</option>
                     <option value="60">60° (Bisel 30°)</option>
@@ -328,9 +374,10 @@
                 </div>
                 <div class="input-field">
                   <label for="param-chamfer-tip-offset">Folga Ponta (mm)</label>
-                  <input type="number" id="param-chamfer-tip-offset" value="0.5" min="0.0" max="3.0" step="0.1" title="Desce a fresa além da ponta para cortar com a lâmina lateral afiada">
+                  <input type="number" id="param-chamfer-tip-offset" value="0.5" min="0.0" max="5.0" step="0.1" title="Desce a fresa além da ponta para cortar com a lâmina lateral afiada">
                 </div>
               </div>
+              <div id="chamfer-vbit-warning" style="display: none; margin-top: 0.45rem; padding: 0.4rem 0.55rem; background: rgba(239, 68, 68, 0.14); border: 1px solid rgba(239, 68, 68, 0.45); border-radius: 5px; font-size: 0.72rem; color: #fca5a5; line-height: 1.35;"></div>
             </div>
           </div>
 
@@ -1245,7 +1292,11 @@
     </div>
   </div>
 
-  <script type="module" src="./src/app.js?v=0.11.0"></script>
+  <!-- Motor CAM Modular (Inspirado no Cut-Craft) -->
+  <script src="./src/cam/geometry.js?v=0.12.0"></script>
+  <script src="./src/cam/toolpaths.js?v=0.12.0"></script>
+  <script src="./src/cam/preflight.js?v=0.12.0"></script>
+  <script type="module" src="./src/app.js?v=0.12.0"></script>
 </body>
 
 </html>

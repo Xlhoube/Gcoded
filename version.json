@@ -1,12 +1,12 @@
 {
-  "version": "0.11.1",
+  "version": "0.12.0",
   "name": "Gcoded CAM",
-  "build": "20261109-12",
-  "updatedAt": "2026-11-09T09:10:00Z",
+  "build": "20261119-13",
+  "updatedAt": "2026-11-19T20:25:00Z",
   "highlights": [
-    "🚀 Eliminação de Congelamento na Geração de Trajetória: Cálculo de descidas em Z à prova de passos nulos/negativos com guarda finita de 500 passagens",
-    "🛡️ Proteção de Desbaste (Pocketing) e Amostragem: Desfasamento concêntrico limitado e amostragem de curvas SVG com teto de 500 pontos para geração instantânea",
-    "📋 Gestor de Ordens de Trabalho CAM (Work Orders): Permite associar múltiplas operações de fresagem (Desbaste, Chanfro, Recorte, Furação) ao mesmo vetor sem ter de duplicar linhas no desenho!",
-    "🔄 Reordenação e Ativação Rápida de Percursos: Controla a sequência de corte com botões ▲/▼, ativa/desativa operações com caixas de seleção e edita parâmetros individualmente"
+    "🧩 Arquitetura CAM Modular (REA Cut-Craft): Motor separado em src/cam/geometry.js, toolpaths.js e preflight.js — código mais limpo, rápido e 100% testável",
+    "📐 Chanfro V-Bit Exato + Proteção de Cone: Corrige o offset lateral da ponta da V-Bit e avisa em tempo real se a largura exceder a altura útil do cone",
+    "🌀 Pocket Avançado & Sentido de Corte: Novo desbaste Centro→Fora (Middle-Out), modo Raster Zig-Zag com acabamento, sobreespessura (Allowance) e escolha Climb/Convencional",
+    "🎯 Nova Estratégia de Furação (Peck Drilling) + Painel Pré-Voo CNC: Verifica profundidades, avanços, limites da fresa e trocas de ferramenta (M0) antes do corte"
   ]
 }
